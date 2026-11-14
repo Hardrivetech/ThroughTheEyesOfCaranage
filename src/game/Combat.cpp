@@ -9,8 +9,10 @@ namespace {
 
 const glm::vec3 kBlood{0.55f, 0.02f, 0.02f};
 
-// Slab test. Rays starting inside the box report t = 0 so point-blank
-// shots and fast projectiles still register.
+} // namespace
+
+// Rays starting inside the box report t = 0 so point-blank shots and fast
+// projectiles still register.
 bool rayAabb(const glm::vec3& o, const glm::vec3& d, const glm::vec3& bmin,
              const glm::vec3& bmax, float maxT, float& tOut, glm::vec3& nOut) {
     float     tMin = 0.0f;
@@ -47,8 +49,6 @@ bool rayAabb(const glm::vec3& o, const glm::vec3& d, const glm::vec3& bmin,
     return true;
 }
 
-} // namespace
-
 Target Target::dummy(glm::vec3 feet, float amp) {
     Target t;
     t.center       = feet + glm::vec3(0.0f, t.half.y, 0.0f);
@@ -71,8 +71,11 @@ bool Combat::applyDamage(Target& t, float damage) {
 }
 
 void Combat::registerTargetHit(Target& t, const glm::vec3& point, const glm::vec3& normal,
-                               float damage, bool head, bool tracer, const glm::vec3& from) {
+                               float damage, bool head, bool tracer, const glm::vec3& from,
+                               bool melee) {
     HitEvent e;
+    e.target = static_cast<int>(&t - targets_.data());
+    e.melee  = melee;
     e.kind   = head ? HitKind::Head : HitKind::Body;
     e.pos    = point;
     e.normal = normal;
@@ -99,7 +102,7 @@ void Combat::hitscan(const glm::vec3& o, const glm::vec3& d, const glm::vec3& mu
         color = w->block->color;
     }
     for (Target& t : targets_) {
-        if (!t.alive()) continue;
+        if (!t.alive() || t.held) continue;
         float     tt = 0.0f;
         glm::vec3 nn{0.0f};
         if (rayAabb(o, d, t.min(), t.max(), bestT, tt, nn)) {
@@ -112,7 +115,8 @@ void Combat::hitscan(const glm::vec3& o, const glm::vec3& d, const glm::vec3& mu
     const glm::vec3 point = o + d * bestT;
     if (target) {
         const bool head = point.y >= target->headBottom();
-        registerTargetHit(*target, point, n, damage * (head ? 2.0f : 1.0f), head, tracer, muzzle);
+        registerTargetHit(*target, point, n, damage * (head ? 2.0f : 1.0f), head, tracer, muzzle,
+                          !tracer);
         return;
     }
 
@@ -127,17 +131,26 @@ void Combat::hitscan(const glm::vec3& o, const glm::vec3& d, const glm::vec3& mu
     events_.push_back(e);
 }
 
-int Combat::strike(const glm::vec3& c, float radius, float damage, const glm::vec3& dir) {
+int Combat::strike(const glm::vec3& c, float radius, float damage, const glm::vec3& dir,
+                   int exclude, bool melee) {
     int hits = 0;
-    for (Target& t : targets_) {
-        if (!t.alive()) continue;
+    for (std::size_t i = 0; i < targets_.size(); ++i) {
+        Target& t = targets_[i];
+        if (!t.alive() || t.held || static_cast<int>(i) == exclude) continue;
         const glm::vec3 closest = glm::clamp(c, t.min(), t.max());
         if (glm::length(closest - c) > radius) continue;
         const bool head = closest.y >= t.headBottom();
-        registerTargetHit(t, closest, -dir, damage * (head ? 1.5f : 1.0f), head, false, c);
+        registerTargetHit(t, closest, -dir, damage * (head ? 1.5f : 1.0f), head, false, c, melee);
         ++hits;
     }
     return hits;
+}
+
+bool Combat::damageTarget(std::size_t index, float damage, const glm::vec3& point,
+                          const glm::vec3& normal, const glm::vec3& from) {
+    if (index >= targets_.size() || !targets_[index].alive()) return false;
+    registerTargetHit(targets_[index], point, normal, damage, false, false, from);
+    return events_.back().killed;
 }
 
 void Combat::detonate(const glm::vec3& pos, float radius, float damage, float knockback) {
@@ -196,7 +209,7 @@ bool Combat::advance(Projectile& p, const glm::vec3& from, const glm::vec3& to) 
     }
     const glm::vec3 inflate(p.radius);
     for (Target& t : targets_) {
-        if (!t.alive()) continue;
+        if (!t.alive() || t.held) continue;
         float     tt = 0.0f;
         glm::vec3 nn{0.0f};
         if (rayAabb(from, dir, t.min() - inflate, t.max() + inflate, bestT, tt, nn)) {
@@ -237,6 +250,7 @@ void Combat::explode(const glm::vec3& pos, const glm::vec3& normal, float radius
 
         const float dmg = damage * (1.0f - d / radius);
         HitEvent e;
+        e.target = static_cast<int>(&t - targets_.data());
         e.kind   = HitKind::Body;
         e.pos    = closest;
         e.normal = glm::normalize(closest - pos + glm::vec3(0.0f, 1e-3f, 0.0f));

@@ -27,6 +27,7 @@ struct Target {
     float respawnTimer = 0.0f;
     bool  respawns     = true;   // false: stays dead (objective enemies)
     bool  claimed      = false;  // corpse already picked up (cleared on revive)
+    bool  held         = false;  // carried by the player as a human shield (ignored by player attacks)
 
     glm::vec3 patrolOrigin{0.0f};
     glm::vec3 patrolAxis{1.0f, 0.0f, 0.0f};
@@ -63,7 +64,13 @@ struct HitEvent {
     float     damage    = 0.0f;
     float     radius    = 0.0f;  // explosions
     float     knockback = 0.0f;  // explosions
+    int       target    = -1;    // index into Combat::targets() for Body/Head hits
+    bool      melee     = false; // fists / swung objects (not bullets or blasts)
 };
+
+// Slab test against an AABB. Rays starting inside report t = 0.
+bool rayAabb(const glm::vec3& o, const glm::vec3& d, const glm::vec3& bmin,
+             const glm::vec3& bmax, float maxT, float& tOut, glm::vec3& nOut);
 
 struct Projectile {
     glm::vec3 pos{0.0f};
@@ -99,7 +106,14 @@ public:
 
     // Instant melee/impact sphere: damages every live target it overlaps and
     // emits Body/Head events. Returns the number of targets hit.
-    int strike(const glm::vec3& center, float radius, float damage, const glm::vec3& dir);
+    // `exclude` skips one target (a thrown body must not hit itself).
+    int strike(const glm::vec3& center, float radius, float damage, const glm::vec3& dir,
+               int exclude = -1, bool melee = true);
+
+    // Direct damage to one target (human-shield hits, thrown-body impacts).
+    // Emits a Body event. Returns true if it killed.
+    bool damageTarget(std::size_t index, float damage, const glm::vec3& point,
+                      const glm::vec3& normal, const glm::vec3& from);
 
     // Public blast (hazard barrels).
     void detonate(const glm::vec3& pos, float radius, float damage, float knockback);
@@ -129,7 +143,8 @@ private:
                  float damage, float knockback);
     bool applyDamage(Target& t, float damage);
     void registerTargetHit(Target& t, const glm::vec3& point, const glm::vec3& normal,
-                           float damage, bool head, bool tracer, const glm::vec3& from);
+                           float damage, bool head, bool tracer, const glm::vec3& from,
+                           bool melee = false);
 
     const World&            world_;
     std::vector<Target>     targets_;

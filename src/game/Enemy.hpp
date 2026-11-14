@@ -10,7 +10,11 @@
 
 namespace carnage {
 
-enum class AiState { Idle, Patrol, Chase, Attack };
+// Seized: staggered by a heavy melee hit, then optionally carried (human
+// shield) and thrown. The brain is suspended for the whole time.
+enum class AiState { Idle, Patrol, Chase, Attack, Seized };
+
+enum class SeizeSub { None, Staggered, Held, Thrown };
 
 inline const char* name(AiState s) {
     switch (s) {
@@ -18,6 +22,7 @@ inline const char* name(AiState s) {
         case AiState::Patrol: return "Patrol";
         case AiState::Chase:  return "Chase";
         case AiState::Attack: return "Attack";
+        case AiState::Seized: return "Seized";
     }
     return "?";
 }
@@ -54,6 +59,16 @@ struct EnemyConfig {
     float rangedDamage  = 8.0f;
     float spread        = 0.07f;   // tangent of the cone half-angle
     float playerRadius  = 0.45f;   // a shot whose aim point lands outside this misses
+
+    // Seize / human shield / throw.
+    float staggerTime   = 2.5f;    // window in which a staggered enemy can be grabbed
+    float grabReach     = 2.4f;
+    float grabRadius    = 0.9f;    // max distance from the view ray
+    float throwMass     = 80.0f;   // kg, scales impact damage
+    float throwEnergy   = 0.04f;   // damage per joule
+    float throwBase     = 10.0f;
+    float throwMaxDmg   = 160.0f;
+    float shieldMeleeScale = 0.5f; // melee damage to the player while a shield is held
 };
 
 enum class EnemyType { Melee, Ranged };
@@ -79,6 +94,9 @@ struct Enemy {
     EnemyType   type   = EnemyType::Melee;
     int         sector = -1;        // objective sector id; -1 = free roaming
     float       stride = 0.0f;      // distance walked since the last footstep
+    SeizeSub    sub = SeizeSub::None;  // only meaningful while state == Seized
+    float       seizeTimer = 0.0f;     // stagger time remaining
+    glm::vec3   vel3{0.0f};            // thrown flight velocity
 };
 
 inline float attackReach(const Enemy& e, const EnemyConfig& c) {
@@ -114,6 +132,8 @@ inline bool stepState(Enemy& e, const EnemyConfig& c, const Perception& p, float
             if (p.visible) enterState(e, AiState::Chase);
             else if (e.stateTime >= c.patrolTime) enterState(e, AiState::Idle);
             break;
+        case AiState::Seized:
+            break;  // driven by Enemies::stepSeized, not the perception brain
         case AiState::Chase:
             e.lostTime = p.visible ? 0.0f : e.lostTime + dt;
             if (inReach) enterState(e, AiState::Attack);
@@ -149,6 +169,7 @@ struct EnemyAttack {
     glm::vec3 to{0.0f};     // tracer end (ranged)
     bool      blocked = false;  // ranged shot ended on world geometry
     glm::vec3 normal{0.0f, 1.0f, 0.0f};
+    bool      shielded = false;  // absorbed by the human shield (damage == 0)
 };
 
 // Owns the AI brains; each brain drives a Combat::Target so hitscan, melee,
@@ -160,7 +181,7 @@ public:
     // sector >= 0 marks an objective enemy: it never respawns, so "cleared"
     // is a stable condition.
     void add(Combat& combat, glm::vec3 feet, EnemyType type = EnemyType::Melee, int sector = -1);
-    void clear() { enemies_.clear(); attacks_.clear(); }
+    void clear() { enemies_.clear(); attacks_.clear(); held_ = -1; impact_ = 0.0f; }
 
     // Call after Combat::update so the interpolation snapshot is consistent.
     // Attacks released this tick are available from attacks() until the next call.
@@ -171,6 +192,21 @@ public:
     const std::vector<glm::vec3>& footsteps() const { return footsteps_; }
 
     // Living enemies assigned to a sector (for objective triggers).
+    // ---- seize / shield / throw (indices are into enemies()) ----------------
+    // Staggers the enemy driving Combat target `targetIndex`. False if it is
+    // not an enemy or is already seized.
+    bool stagger(std::size_t targetIndex);
+    // Nearest staggered enemy along the view ray, or -1.
+    int  findStaggered(const glm::vec3& eye, const glm::vec3& forward) const;
+    void grab(int enemyIndex);
+    // Hurls the held enemy with the given velocity.
+    void throwHeld(const glm::vec3& velocity);
+    int  heldIndex() const { return held_; }
+    // Where the held enemy's feet are placed each tick (in front of the player).
+    void setCarryPoint(const glm::vec3& feet) { carry_ = feet; }
+    // Strongest throw impact since the last call, 0..1 (camera feedback).
+    float takeImpact() { const float v = impact_; impact_ = 0.0f; return v; }
+
     int aliveInSector(const Combat& combat, int sector) const;
     int totalInSector(int sector) const;
 
@@ -183,12 +219,16 @@ public:
 
 private:
     void move(Enemy& e, glm::vec2 wish, float speed, const World& world, float dt);
+    void stepSeized(Enemy& e, Target& t, Combat& combat, const World& world, float dt);
 
     EnemyConfig        cfg_;
     std::vector<Enemy> enemies_;
     std::vector<EnemyAttack> attacks_;
     std::vector<glm::vec3>   footsteps_;
     Rng                rng_{0xC0FFEEu};
+    int                held_   = -1;
+    glm::vec3          carry_{0.0f};
+    float              impact_ = 0.0f;
 };
 
 } // namespace carnage

@@ -363,6 +363,101 @@ TEST_CASE("Spatial audio attenuates with distance and pans by angle", "[audio]")
     CHECK(behind.gain < ahead.gain);
 }
 
+
+namespace {
+World floorWorld() {
+    World w;
+    w.add(Block{{-50.0f, -50.0f}, {50.0f, 50.0f}, 0.0f, 0.0f, 0, glm::vec3(0.5f), false,
+                Material::Concrete, true, -0.2f, true, -1});
+    return w;
+}
+} // namespace
+
+TEST_CASE("Staggered enemies can be grabbed and live ones cannot", "[enemy][seize]") {
+    World w = floorWorld();
+    Combat combat(w);
+    Enemies enemies;
+    enemies.add(combat, {0.0f, 0.0f, -2.0f}, EnemyType::Melee);
+    const glm::vec3 eye{0.0f, 1.6f, 0.0f}, fwd{0.0f, 0.0f, -1.0f};
+
+    CHECK(enemies.findStaggered(eye, fwd) < 0);  // alive and unstaggered
+    REQUIRE(enemies.stagger(0));
+    CHECK_FALSE(enemies.stagger(0));             // already seized
+    CHECK(enemies.findStaggered(eye, fwd) == 0);
+    CHECK(combat.targets()[0].alive());
+
+    enemies.grab(0);
+    CHECK(enemies.heldIndex() == 0);
+    CHECK(combat.targets()[0].alive());
+
+    // A held body is ignored by player attacks.
+    enemies.setCarryPoint({0.0f, 0.4f, -1.0f});
+    enemies.tick(1.0f / 60.0f, combat, w, {0.0f, 0.0f, 0.0f}, 1.7f);
+    CHECK(combat.targets()[0].held);
+    combat.hitscan(eye, fwd, eye, 20.0f, 50.0f);
+    CHECK(combat.targets()[0].hp == combat.targets()[0].maxHp);
+}
+
+TEST_CASE("Stagger expires back into the chase", "[enemy][seize]") {
+    World w = floorWorld();
+    Combat combat(w);
+    Enemies enemies;
+    enemies.add(combat, {0.0f, 0.0f, -6.0f}, EnemyType::Melee);
+    REQUIRE(enemies.stagger(0));
+    for (int i = 0; i < 200; ++i) enemies.tick(1.0f / 60.0f, combat, w, {0.0f, 0.0f, 0.0f}, 1.7f);
+    CHECK(enemies.enemies()[0].state != AiState::Seized);
+}
+
+TEST_CASE("Human shield absorbs hitscan and takes the damage", "[enemy][seize]") {
+    World w = floorWorld();
+    Combat combat(w);
+    EnemyConfig cfg;
+    cfg.spread = 0.0f;
+    Enemies enemies(cfg);
+    enemies.add(combat, {0.0f, 0.0f, -8.0f}, EnemyType::Ranged);  // shooter (index 0)
+    enemies.add(combat, {0.0f, 0.0f, -1.0f}, EnemyType::Melee);   // shield (index 1)
+    REQUIRE(enemies.stagger(1));
+    enemies.grab(1);
+    REQUIRE(enemies.heldIndex() == 1);
+
+    int shots = 0, shielded = 0;
+    float playerDamage = 0.0f;
+    for (int i = 0; i < 240; ++i) {
+        enemies.setCarryPoint({0.0f, 0.0f, -1.0f});
+        enemies.tick(1.0f / 60.0f, combat, w, {0.0f, 0.0f, 0.0f}, 1.7f);
+        for (const EnemyAttack& a : enemies.attacks()) {
+            if (!a.ranged) continue;
+            ++shots;
+            shielded += a.shielded ? 1 : 0;
+            playerDamage += a.damage;
+        }
+        combat.clearEvents();
+    }
+    CHECK(shots > 0);
+    CHECK(shielded == shots);
+    CHECK(playerDamage == 0.0f);
+    CHECK(combat.targets()[1].hp < combat.targets()[1].maxHp);
+}
+
+TEST_CASE("Thrown enemy hurts others and lands on the floor", "[enemy][seize]") {
+    World w = floorWorld();
+    Combat combat(w);
+    Enemies enemies;
+    enemies.add(combat, {0.0f, 0.0f, -1.0f}, EnemyType::Melee);  // thrown (0)
+    enemies.add(combat, {0.0f, 0.0f, -7.0f}, EnemyType::Melee);  // victim (1)
+    enemies.stagger(0);
+    enemies.grab(0);
+    enemies.throwHeld({0.0f, 5.0f, -17.0f});
+    CHECK(enemies.heldIndex() < 0);
+    for (int i = 0; i < 120; ++i) {
+        enemies.tick(1.0f / 60.0f, combat, w, {20.0f, 0.0f, 20.0f}, 1.7f);
+        combat.clearEvents();
+    }
+    CHECK(combat.targets()[1].hp < combat.targets()[1].maxHp);
+    CHECK(combat.targets()[0].hp < combat.targets()[0].maxHp);   // impact damage to the thrown body
+    CHECK(enemies.enemies()[0].pos.y >= -0.01f);
+}
+
 TEST_CASE("Occlusion lowers cutoff and gain smoothly", "[audio]") {
     CHECK(audio::occlusionFraction(0, 5) == 0.0f);
     CHECK(audio::occlusionFraction(2, 5) == Catch::Approx(0.4f));

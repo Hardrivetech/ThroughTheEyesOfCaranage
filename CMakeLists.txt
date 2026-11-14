@@ -93,6 +93,7 @@ if(CARNAGE_BUILD_TESTS)
         tests/test_core.cpp
         src/game/World.cpp
         src/game/Combat.cpp
+        src/game/Enemy.cpp
         src/ui/Menu.cpp
         src/ui/Text.cpp)
     target_include_directories(CarnageTests PRIVATE src)

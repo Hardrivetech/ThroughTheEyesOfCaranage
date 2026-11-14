@@ -317,6 +317,12 @@ int main() {
             weapons[current]->equip();
             return std::string("equipped ") + std::string(kWeaponNames[idx]);
         });
+        console.add("stagger_all", "stagger every live enemy (seizable)", [&](Args) -> CmdResult {
+            int n = 0;
+            for (std::size_t i = 0; i < combat.targets().size(); ++i)
+                if (const Target* t = combat.targetAt(i); t && t->alive() && enemies.stagger(i)) ++n;
+            return std::format("staggered {}", n);
+        });
         console.add("kill_all", "kill every live enemy", [&](Args) -> CmdResult {
             int n = 0;
             for (std::size_t i = 0; i < combat.targets().size(); ++i) {
@@ -613,8 +619,34 @@ int main() {
 
             // Grab / hurl (E) and bludgeon (left click while holding something).
             {
+                // Living enemies: E throws a held one, or grabs a staggered one in
+                // reach. Either consumes the press so Interact doesn't also react.
+                bool grabPress = alive && kPressed(Action::Grab);
+                if (grabPress && enemies.heldIndex() >= 0) {
+                    enemies.throwHeld(aim.forward * 17.0f + glm::vec3(0.0f, 5.0f, 0.0f) +
+                                      player.velocity() * 0.5f);
+                    audio::play(audio::Sfx::Throw, 1.0f, 0.0f, 0.7f);
+                    trauma.add(0.35f);
+                    feel.onFire(1.2f, -1.0f);
+                    grabPress = false;
+                } else if (grabPress && !interact.holding()) {
+                    const int idx = enemies.findStaggered(aim.origin, aim.forward);
+                    if (idx >= 0) {
+                        enemies.grab(idx);
+                        audio::play(audio::Sfx::Pickup, 0.9f, 0.0f, 0.7f);
+                        trauma.add(0.15f);
+                        grabPress = false;
+                    }
+                }
+                if (enemies.heldIndex() >= 0) {
+                    // Carry point: just ahead of the player, below eye level, not inside walls.
+                    float dist = 1.1f;
+                    if (const auto h = world.raycast(aim.origin, aim.forward, 1.4f))
+                        dist = std::clamp(h->t - 0.5f, 0.3f, 1.1f);
+                    enemies.setCarryPoint(aim.origin + aim.forward * dist - glm::vec3(0.0f, 1.2f, 0.0f));
+                }
                 InteractInput ii;
-                ii.grabPressed  = alive && kPressed(Action::Grab);
+                ii.grabPressed  = grabPress;
                 ii.swingPressed = alive && holdingItem && input::mousePressed(GLFW_MOUSE_BUTTON_LEFT);
                 InteractContext ic;
                 ic.eye       = aim.origin;
@@ -626,6 +658,10 @@ int main() {
                 if (ie.thrown)  audio::play(audio::Sfx::Throw, 0.9f);
                 if (ie.swung)   audio::play(audio::Sfx::Swing, 0.9f, 0.2f);
                 if (ie.hit)     audio::play(audio::Sfx::Impact, 0.5f + 0.5f * ie.impact);
+                if (const float ti = enemies.takeImpact(); ti > 0.0f) {
+                    audio::play(audio::Sfx::Explosion, 0.5f + 0.4f * ti, 0.0f, 1.3f);
+                    trauma.add(0.2f + 0.4f * ti);
+                }
                 if (ie.swung || ie.thrown || ie.hit || ie.exploded) {
                     trauma.add(0.25f * ie.impact + (ie.exploded ? 0.5f : 0.0f));
                     feel.onFire(1.2f * ie.impact, -1.0f);
@@ -675,6 +711,15 @@ int main() {
             // unaware of any of it.
             for (const HitEvent& e : combat.events()) {
                 effects.onHit(e, world);
+                // A heavy melee hit at close range staggers a still-living enemy so it
+                // can be seized, instead of simply dying.
+                if (e.melee && !e.killed && e.target >= 0 &&
+                    (e.kind == HitKind::Body || e.kind == HitKind::Head) &&
+                    glm::length(e.pos - player.position()) < 2.6f) {
+                    const Target* tt = combat.targetAt(static_cast<std::size_t>(e.target));
+                    if (tt && tt->alive() && (tt->hp <= 0.6f * tt->maxHp || e.damage >= 30.0f))
+                        enemies.stagger(static_cast<std::size_t>(e.target));
+                }
                 if (e.kind == HitKind::Body)  playAt3(audio::Sfx::HitBody, e.pos, 0.9f);
                 if (e.kind == HitKind::Head)  playAt3(audio::Sfx::HitHead, e.pos, 1.0f);
                 if (e.kind == HitKind::World) playAt3(audio::Sfx::Impact, e.pos, 0.5f);
@@ -860,7 +905,12 @@ int main() {
             overlay.clear();
             if (!menu.active()) {
                 hud.build(weapon, left, effects, proj * view, renderer::aspect(), overlay);
-                if (!interact.holding() && interact.canGrab())
+                if (enemies.heldIndex() >= 0)
+                    Hud::prompt(keyName(menu.settings().keys.key(Action::Grab)), "THROW", renderer::aspect(), overlay);
+                else if (!interact.holding() &&
+                         (interact.canGrab() ||
+                          enemies.findStaggered(player.eyePosition(1.0f),
+                                                camera.orientation({0.0f, 0.0f}) * glm::vec3(0.0f, 0.0f, -1.0f)) >= 0))
                     Hud::prompt(keyName(menu.settings().keys.key(Action::Grab)), "GRAB", renderer::aspect(), overlay);
                 if (!health.dead) {
                     if (levelComplete) {
