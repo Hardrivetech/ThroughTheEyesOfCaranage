@@ -1,0 +1,15 @@
+Checks: >
+  bugprone-*,
+  performance-*,
+  modernize-*,
+  readability-braces-around-statements,
+  cppcoreguidelines-init-variables,
+  cppcoreguidelines-narrowing-conversions,
+  -modernize-use-trailing-return-type,
+  -modernize-use-nodiscard,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-implicit-widening-of-multiplication-result,
+  -readability-braces-around-statements
+WarningsAsErrors: ''
+# Vendored headers are not ours to lint.
+HeaderFilterRegex: '.*/src/.*'

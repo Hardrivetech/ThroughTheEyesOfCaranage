@@ -1,0 +1,42 @@
+build/
+out/
+.vs/
+.cache/
+compile_commands.json
+
+# Build directories
+/build/
+/out/
+.cmake/
+CMakeCache.txt
+CMakeFiles/
+cmake-install.cmake
+cmake_install.cmake
+CMakeDetermineCompilerABI.bin
+CMakeTestCompiler.bin
+Makefile
+*.ninja
+build.ninja
+rules.ninja
+
+# IDE specific files
+.vs/
+.vscode/
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.sln
+.idea/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Binary outputs
+*.exe
+*.dll
+*.lib
+*.obj
+*.pdb
+*.ilk
