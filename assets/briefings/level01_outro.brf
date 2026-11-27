@@ -1,6 +1,8 @@
 # assets/briefings/level01_outro.brf
 # Post-escape intro briefing: Carnage & Kodiak Island
 
+briefing name=level01_outro title="CARNAGE // KODIAK ISLAND"
+
 beat image=briefings/boot_diagnostics.png text="[BOOT SEQUENCE // SUB-LEVEL 04] Cold iron in your spine. Chrome where your ribs used to be. They bolted a neural override into your skull at Blackwater Anchorage and left you on a slab to bleed out -- until the firmware cracked and woke up hungry."
 beat image=briefings/carnage_hud.png text="[PROJECT CARNAGE] No name. No badge. Just a serial tag stamped into your collarbone: UNIT-00 // CARNAGE. Every strike feeds the actuator loop, every dropped body buys another ten seconds of redline adrenaline."
 beat image=briefings/kodiak_basin.png text="[KODIAK ISLAND, ALASKA] Forty miles off the Alaskan shelf, buried under freezing salt fog and rusted cannery steel. The syndicate turned Kodiak Basin into an off-grid blacksite -- docks, fuel depots, relay towers, and three hundred armed contractors standing between you and the mainland."
