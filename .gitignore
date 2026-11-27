@@ -6,7 +6,9 @@ compile_commands.json
 
 # Build directories
 /build/
+/build-*/
 /out/
+/__cmake_systeminformation/
 .cmake/
 CMakeCache.txt
 CMakeFiles/

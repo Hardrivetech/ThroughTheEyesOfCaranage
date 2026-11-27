@@ -1,84 +1,151 @@
 # Through the Eyes of Carnage
 
-**Through the Eyes of Carnage** is a high-octane, hyper-kinetic first-person shooter built from scratch on a custom, zero-dependency C++23 game engine. Inspired by visceral industrial action aesthetics (*Hardcore Henry* style), the game features relentless combat, active melee lunges, hitscan ranged threats, multi-room arena progression, and a raw industrial cybergrind soundscape.
+**Through the Eyes of Carnage** is a high-octane, hyper-kinetic first-person action game in the *Hardcore Henry* style, built on a custom C++23 engine. It features momentum movement, dual-wield and melee combat, enemy seize / human-shield / throw mechanics, multi-sector level progression, and an industrial cybergrind soundtrack.
+
+**Status:** pre-alpha vertical slice (v0.1.0). See [`STATUS.md`](STATUS.md) for the current project report.
 
 ---
 
-## 🚀 Key Architectural Features
+## Key Architectural Features
 
-Unlike projects tied to commercial engines, **Through the Eyes of Carnage** features a completely bespoke technical stack engineered for raw speed, low-level control, and deterministic performance:
-
-* **Custom C++23 Engine:** Zero third-party game engine bloat. Built directly on OpenGL 4.6, GLFW, GLAD, and GLM.
-* **Deterministic 60Hz Loop:** Fixed-timestep simulation ensuring rock-solid physics, consistent combat timing, and predictable state updates.
-* **Optimized $O(1)$ Particle & Decal Systems:** High-performance memory pools for blood splatters, impact sparks, and world decals with automatic culling and ring-buffer management.
-* **3D Spatialized Audio:** Custom 48-voice audio mixer featuring distance attenuation, velocity panning, and real-time audio positioning relative to the player camera.
-* **Built-in Developer Suite:** Header-only unit-tested console command registry, live dev menu overlays, and an `F4` performance profiler tracking CPU splits, draw calls, and entity counts in real time.
+* **Custom C++23 engine** on OpenGL 4.6, with a small set of focused libraries instead of a commercial engine (see [Dependencies](#dependencies)).
+* **Deterministic 60 Hz loop:** fixed-timestep simulation for consistent physics, combat timing and state updates.
+* **O(1) particle and decal systems:** fixed memory pools for blood, sparks and world decals, with automatic culling and ring-buffer management.
+* **3D spatial audio:** a custom mixer with distance attenuation, panning and occlusion, relative to the player camera.
+* **Developer suite:** a unit-tested console command registry, a live dev menu and an F4 profiler.
 
 ---
 
-## 🛠️ Project Structure
+## Current Feature Set (Vertical Slice)
+
+* **Momentum movement:** sprint, slide, jump / vault, wall-run, ramps and ledges.
+* **Combat:**
+  * Hitscan weapons: Pistol, SMG and Shotgun.
+  * A Rocket Launcher with explosions.
+  * Fists and picked-up melee items (pipe, bat, barrel).
+  * **Dual-wield:** an optional left-hand weapon, with a modifier key for left-hand actions.
+* **Enemies:** melee (lunge) and ranged (hitscan) AI with line-of-sight, vision-cone and hearing checks.
+* **Seize / grab / human shield / throw:** a heavy melee hit staggers an enemy. A staggered enemy can be grabbed, used as a human shield that absorbs hitscan fire, or thrown to damage others.
+* **3-sector level flow:** corridor, arena and pit. Clearing a sector opens its door or gate, clearing the pit completes the level, and checkpoints are placed along the way.
+* **Player health:** health and armor with i-frames, plus a death and checkpoint-respawn flow.
+* **Menus:** main menu and settings, including rebindable keys saved to `carnage_settings.ini`.
+
+---
+
+## Project Structure
 
 ```text
 src/
-├── core/         # Fixed-timestep loop, spatial audio, and core math
-├── dev/          # Header-only command console, DevState, and UI overlays
-├── game/         # Player health, active enemy AI, inventory, and triggers
-└── gfx/          # OpenGL renderer, O(1) particle system, and decal ring buffer
-tests/            # Unit tests for console logic, tokenization, and command dispatch
-CMakeLists.txt    # Modern CMake configuration
+├── core/         # Fixed-timestep loop, renderer, input, spatial audio, memory, logging
+├── dev/          # Header-only command console, DevState and dev UI overlays
+├── game/         # Movement, camera feel, weapons, combat, enemy AI, interaction, triggers, world
+├── gfx/          # Meshes, shaders, humanoid model, particle system and decals
+└── ui/           # Menus and text rendering
+assets/           # Shaders, meshes and audio
+third_party/      # Vendored single-header libraries (stb_image, miniaudio)
+tests/            # Catch2 unit tests
+CMakeLists.txt    # CMake configuration
 ```
 
 ---
 
-## 🕹️ Developer Console & Cheats
+## Controls
 
-Press **``` (backtick)** during gameplay to open the developer console, **F3** to toggle the Dev Menu, and **F4** to display the real-time performance profiler.
+Default bindings (all rebindable in the settings menu):
 
-**Supported Console Commands:**
-* `god` — Toggle invulnerability
-* `infammo` — Infinite weapon ammunition
-* `noclip` — Fly freely through world geometry (`Space` = Ascend, `Ctrl` = Descend, `Shift` = Fast)
-* `freeze` — Toggle enemy AI updates
-* `stats` — Render telemetry and performance readouts
-* `spawn <melee|ranged> [n]` — Spawn active combatants into the sector
-* `kill_all` — Terminate all active enemies
-* `tp x y z` — Teleport player coordinates
-* `open_door <id>` / `close_door <id>` — Control level triggers and security gates
-* `timescale <val>` — Scale simulation speed
+| Action | Key |
+|---|---|
+| Move | `W` `A` `S` `D` |
+| Sprint | `Left Shift` |
+| Crouch / slide | `C` or `Left Ctrl` |
+| Jump / vault | `Space` |
+| Fire right hand | Left mouse button |
+| Fire left hand (when dual-wielding) | Right mouse button |
+| Reload right / left | `R` / `Q` |
+| Left-hand modifier | `Left Alt` |
+| Weapons | `1` Fists, `2` Pistol, `3` SMG, `4` Shotgun, `5` Rocket Launcher |
+| Grab / throw | `E` |
+| Respawn | `T` |
+
+Developer keys: `` ` `` (backtick) opens the console, `F3` toggles the dev menu and `F4` shows the performance profiler.
+
+### Console commands
+
+* `god`: toggle invulnerability
+* `infammo`: infinite ammunition
+* `noclip`: fly through geometry (`Space` ascend, `Ctrl` descend, `Shift` fast)
+* `freeze`: toggle enemy AI updates
+* `stats`: render telemetry and performance readouts
+* `spawn <melee|ranged> [n]`: spawn enemies
+* `kill_all`: kill all active enemies
+* `tp x y z`: teleport the player
+* `open_door <id>` / `close_door <id>`: control doors and gates
+* `timescale <val>`: scale simulation speed
+* `win`: trigger level completion
 
 ---
 
-## ⚙️ Building from Source
+## Dependencies
 
-### Prerequisites
-* A C++23 compatible compiler (MSVC 2022, GCC 13+, or Clang 16+)
-* CMake (3.20 or higher)
-* Ninja (recommended build tool)
-* OpenGL 4.6 compatible GPU drivers
+| Dependency | Version | How it is obtained |
+|---|---|---|
+| C++23 compiler | GCC 13+, Clang 16+ or MSVC 2022 | system |
+| CMake | 3.24+ | system |
+| Ninja | any recent | system (recommended generator) |
+| OpenGL | 4.6 capable GPU and drivers | system |
+| Python 3 + `jinja2` | any recent | system; needed to generate the GLAD loader at configure time |
+| GLFW | 3.4 | CMake `FetchContent` |
+| GLM | 1.0.1 | CMake `FetchContent` |
+| GLAD2 | v2.0.8 | CMake `FetchContent` |
+| stb_image, miniaudio | vendored | `third_party/` |
+| Catch2 | v3.7.1 | CMake `FetchContent`, only when tests are enabled |
 
-### Build Instructions (Windows / Linux)
+`FetchContent` downloads GLFW, GLM, GLAD2 and (for tests) Catch2 on the first configure, so that step needs network access.
+
+---
+
+## Building from Source
+
+### Linux
 
 ```bash
-# 1. Clone the repository
 git clone https://github.com/Hardrivetech/ThroughTheEyesOfCaranage.git
 cd ThroughTheEyesOfCaranage
 
-# 2. Configure the project with CMake
+# Configure and build
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build
 
-# 3. Compile the engine
-cmake --build build --config Release
+# Run (from the repo root, so carnage_settings.ini is written there)
+./build/Carnage
+```
 
-# 4. Run the executable from your build output directory
-./build/Carnage.exe
+### Windows
+
+```bat
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+build\Carnage.exe
+```
+
+On Windows with MinGW the C++ runtime is linked statically, because the engine replaces global `operator new/delete` (`src/core/Memory.cpp`).
+
+Assets are loaded from the source tree's `assets/` directory. Its path is baked into the binary at configure time (`CARNAGE_ASSET_DIR`).
+
+### Running the tests
+
+```bash
+cmake -B build-tests -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCARNAGE_BUILD_TESTS=ON
+cmake --build build-tests --target CarnageTests
+ctest --test-dir build-tests --output-on-failure
 ```
 
 ---
 
-## 🎵 Soundtrack & Identity
-The aggressive industrial death metal and cybergrind soundtrack is composed and produced by **Byt3TuneZ**, merging heavy algorithmic game mechanics with dark, futuristic hardware aesthetics.
+## Soundtrack & Identity
+The aggressive industrial death metal and cybergrind soundtrack is composed and produced by **Byt3TuneZ**.
 
 ---
 
-## 📄 License
+## License
 Developed independently by Hardrive Technologies / Driveby Studios ([hardrivetech.net](https://hardrivetech.net)). All rights reserved.

@@ -104,7 +104,7 @@ TEST_CASE("Console dispatch, history and completion", "[dev]") {
     CHECK_FALSE(c.execute("nope").has_value());
     CHECK(c.log().back().error);
 
-    c.execute("exit");
+    CHECK(c.execute("exit").has_value());
     c.historyUp();
     CHECK(c.input() == "exit");
     c.historyUp();

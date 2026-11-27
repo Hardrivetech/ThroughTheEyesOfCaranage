@@ -1,0 +1,27 @@
+# Normalise line endings: text files are stored with LF in the repo.
+* text=auto
+
+# Explicit LF for sources, build files, docs and shaders.
+*.sh             text eol=lf
+*.cmake          text eol=lf
+CMakeLists.txt   text eol=lf
+*.cpp            text eol=lf
+*.hpp            text eol=lf
+*.c              text eol=lf
+*.h              text eol=lf
+*.md             text eol=lf
+*.glsl           text eol=lf
+*.vert           text eol=lf
+*.frag           text eol=lf
+*.ini            text eol=lf
+*.lvl            text eol=lf
+.clang-tidy      text eol=lf
+.gitignore       text eol=lf
+.gitattributes   text eol=lf
+
+# Binary assets: never touch.
+*.cmesh          binary
+*.mp3            binary
+*.png            binary
+*.exe            binary
+*.a              binary
