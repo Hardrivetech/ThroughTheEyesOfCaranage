@@ -4,6 +4,7 @@
 #include <glm/glm.hpp>
 
 #include <algorithm>
+#include <cstdint>
 #include <optional>
 #include <span>
 #include <vector>
@@ -60,9 +61,19 @@ struct WorldLight {
     float     radius = 12.0f;
 };
 
+// Static geometry plus the queries the game runs every tick (ground, ceiling, walls,
+// rays). Queries go through a uniform 2D grid over the blocks' XZ footprints (a
+// broadphase), so they only examine blocks near the query instead of every block.
+// The grid only decides WHICH blocks are examined, always in ascending index order
+// with the original per-block logic, so results (including tie-breaks) are identical
+// to scanning every block. It is built lazily after blocks are added and does not
+// depend on a block's `enabled` flag, so opening and closing doors never touches it.
+//
+// Thread safety: queries use scratch state inside the World, so they must not run
+// concurrently with each other (the game runs them all on the simulation thread).
 class World {
 public:
-    void add(const Block& b) { blocks_.push_back(b); }
+    void add(const Block& b) { blocks_.push_back(b); gridDirty_ = true; }
     void addLight(const WorldLight& l) { lights_.push_back(l); }
     std::span<const Block> blocks() const { return blocks_; }
     std::span<const WorldLight> lights() const { return lights_; }
@@ -94,9 +105,42 @@ public:
     bool resolveWalls(glm::vec2& p, float feetY, float radius, float step,
                       glm::vec2& vel) const;
 
+    // How much work the broadphase is doing (for tests and the profiler).
+    struct QueryStats {
+        std::uint64_t queries     = 0;  // queries answered
+        std::uint64_t blocksTested = 0;  // blocks actually examined across them
+    };
+    QueryStats queryStats() const { return stats_; }
+    void       resetQueryStats() const { stats_ = {}; }
+
 private:
+    struct Grid {
+        glm::vec2 lo{0.0f}, hi{0.0f};   // bounds of every block footprint
+        float     cell = 8.0f, inv = 0.125f;
+        int       nx = 0, nz = 0;
+        std::vector<std::uint32_t> offsets;  // nx*nz + 1 (CSR)
+        std::vector<std::uint32_t> items;    // block indices per cell, ascending within a cell
+        std::vector<std::uint32_t> large;    // blocks covering too many cells: always examined
+
+        int cx(float x) const;
+        int cz(float z) const;
+    };
+
+    void ensureGrid() const { if (gridDirty_) buildGrid(); }
+    void buildGrid() const;
+    // Fills cand_ with the indices (ascending, unique) of every block whose footprint
+    // may overlap the XZ box [lo, hi].
+    void gather(glm::vec2 lo, glm::vec2 hi) const;
+
     std::vector<Block> blocks_;
     std::vector<WorldLight> lights_;
+
+    mutable Grid                       grid_;
+    mutable bool                       gridDirty_ = true;
+    mutable std::vector<std::uint32_t> cand_;   // scratch: gather() output
+    mutable std::vector<std::uint32_t> seen_;   // scratch: per-ray de-duplication
+    mutable std::uint32_t              epoch_ = 0;
+    mutable QueryStats                 stats_;
 };
 
 } // namespace carnage

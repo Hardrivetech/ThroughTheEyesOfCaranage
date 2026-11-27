@@ -101,6 +101,7 @@ if(CARNAGE_BUILD_TESTS)
         tests/test_prompts.cpp
         tests/test_briefing.cpp
         tests/test_hub.cpp
+        tests/test_broadphase.cpp
         src/game/World.cpp
         src/game/Movement.cpp
         src/game/Camera.cpp
