@@ -12,7 +12,7 @@
 ## Health Check (verified 2026-11-26)
 | Item | Result |
 |---|---|
-| Unit tests (Linux, Debug) | **Pass: 112 test cases** (`ctest` 100%), no expected failures |
+| Unit tests (Linux, Debug) | **Pass: 142 test cases** (`ctest` 100%), no expected failures |
 | Compiler warnings | **0** in project code (game and tests, Linux, GCC) |
 | Linux release binary | A `build/Carnage` binary from Nov 22 is present |
 | Game launched or played during this review | **No.** There was no display in the analysis environment, so gameplay is unverified |
@@ -67,11 +67,11 @@
 1. ~~Repo hygiene~~ Done (Phase 1).
 2. **Playtest and tune:** a manual play session to tune enemy damage, speed, throw damage and weapon feel. Log findings.
 3. ~~Add tests~~ Done (Phase 2). (Ceiling bug fixed, see 4a.)
-4. **Content:** the level format, tutorial prompts, level transitions and the briefing screen are done (Phases A and B); next is the Kodiak hub (Phase C), or new enemy archetypes and a boss.
+4. **Content:** the level format, tutorial prompts, level transitions, briefings and the Kodiak hub are done (Phases A to C); next are new mission levels, enemy archetypes and a boss, or new enemy archetypes and a boss.
 5. **CI:** a Linux and Windows build that runs the test suite.
 
 ## Risks
-- **No second level yet:** level-to-level transitions work (`next_level` on the `level` record). Level 01 now plays its briefing on completion and then returns to the main menu, until the hub (Phase C) exists to point `next_level` at.
+- **Little content beyond the vertical slice:** three levels (Level 01, the Kodiak hub, a practice range). The hub has two gates; the next missions need new levels.
 - **Balance and feel unverified:** nothing has been playtested in this review.
 - **Windows and Linux divergence:** the line-ending and tracked-build-artifact problems will keep causing noisy diffs and merge conflicts (a README merge conflict was already hit in commit `268a3bc`).
 

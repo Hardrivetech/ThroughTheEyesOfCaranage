@@ -57,6 +57,7 @@ Levels are plain-text `.lvl` files in `assets/levels/`, one record per line, so 
 # record key=value key=value ...      (vectors are comma-separated, '#' starts a comment)
 level   name=level01_escape
 spawn   pos=0,0,10
+spawn   name=from_level01_escape pos=0,0.2,40 yaw=0      # a named arrival point
 block   min=-6,-75 max=6,15 top=0 material=tile color=0.38,0.38,0.36
 block   min=10,-100 max=14,-84 h0=3.5 h1=0 axis=z          # a ramp
 block   min=-3,-76 max=3,-75 top=4.8 visible=0 door=0      # a door
@@ -67,12 +68,31 @@ pickup  kind=pipe pos=1.6,0.06,4 yaw=0.4
 trigger when=sector_cleared sector=0 do=open_door door=0
 trigger when=enter min=-16,-1,-92 max=16,6,-77 do=checkpoint point=0,0,-80
 trigger when=sector_cleared sector=2 do=complete
+trigger when=enter min=-2,-1,-57 max=2,4,-55 do=portal level=level01_escape   # a mission gate
 trigger when=enter min=-4,-1,-32 max=4,4,-26 do=prompt time=10 clear_on=wall_run text="SPRINT + JUMP AT A WALL TO WALL-RUN"
 ```
 
 **Tutorial prompts** (`do=prompt`) show a short hint when the player enters a volume. The text fades after `time` seconds, or sooner once the player does what it teaches (`clear_on=jump|slide|vault|wall_run|fire|grab|throw`). `{name}` placeholders show the player's current key for an action (`{grab}`, `{sprint}`, `{weapon1}`, `{lmb}`, ...). The loader checks the text, so a typo'd placeholder, a character the HUD font can't draw, or a line that is too long (90 characters once keys are filled in) is reported instead of showing garbage.
 
-**Level transitions:** put `next_level=<id>` on the `level` record to continue into `assets/levels/<id>.lvl` when the level is completed (by clearing its `complete` sector or the `win` console command). Without it the game returns to the main menu. If the next level can't be loaded the game logs an error and falls back to the menu. Add `briefing=<id>` to play a briefing (below) first.
+**Spawn points and portals:** a `spawn` without a name is the level's default start. Named spawns (`name=from_level01_escape`) are the places other levels send you to, and `yaw=` is the facing in degrees (0 faces north, -Z; 90 faces -X). A `do=portal level=<id> [spawn=<name>]` trigger loads another level when the player walks into its volume, arriving at that spawn. Entering a level always resets your checkpoint to the arrival point, so a checkpoint never carries over between levels.
+
+**Level transitions:** put `next_level=<id>` (and optionally `next_spawn=<name>`) on the `level` record to continue into `assets/levels/<id>.lvl` when the level is completed (by clearing its `complete` sector or the `win` console command). Without it the game returns to the main menu. If the next level can't be loaded the game logs an error and falls back to the menu. Add `briefing=<id>` to play a briefing (below) first.
+
+---
+
+## Kodiak Island hub
+
+`assets/levels/kodiak_hub.lvl` is the staging area between missions: one open outdoor level split into zones, with no streaming.
+
+```text
+landing pad (south) -> plaza -> command post (north, door 0)  -> gate: Level 01 - Escape
+                          \-> east yard   (east,  door 1)  -> gate: Proving Ground (practice range)
+```
+
+* Doors open by themselves when you walk up to them (an `enter` trigger with `do=open_door`), from either side. Each zone has a checkpoint.
+* The glowing gates are portals. `kodiak_range.lvl` is a small practice level (targets, enemies, pickups, cover) with a gate back to the hub.
+* The flow: new game -> Level 01 -> its briefing -> the hub (arriving on the landing pad) -> pick a gate. Quitting to the main menu always makes "Play" start Level 01 again.
+* At startup the game checks the whole network (every portal and `next_level` target exists, every arrival spawn exists, every briefing loads, every level has a way back) and logs anything broken.
 
 ---
 
@@ -127,10 +147,11 @@ Developer keys: `` ` `` (backtick) opens the console, `F3` toggles the dev menu 
 * `stats`: render telemetry and performance readouts
 * `spawn <melee|ranged> [n]`: spawn enemies
 * `kill_all`: kill all active enemies
-* `tp x y z`: teleport the player
-* `open_door <id>` / `close_door <id>`: control doors and gates
+* `tp x y z` / `tp <spawn name>`: teleport the player to coordinates or to one of the level's spawns (`tp` with a bad name lists them)
+* `open_door <id>` / `close_door <id>`: control doors and gates (an unknown id lists the level's doors)
 * `timescale <val>`: scale simulation speed
-* `win`: trigger level completion
+* `win`: trigger level completion (Level 01 then plays its briefing and moves on to the hub)
+* `level <id> [spawn]`: jump to a level, e.g. `level kodiak_hub`, `level kodiak_range from_kodiak_hub`
 * `briefing <id>`: preview a briefing from `assets/briefings/`
 
 ---

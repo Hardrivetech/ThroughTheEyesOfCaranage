@@ -70,6 +70,9 @@ public:
     // Doors are Blocks sharing a `door` id. Closed = enabled (solid).
     void setDoorOpen(int id, bool open);
     void resetDoors() { for (Block& b : blocks_) if (b.door >= 0) b.enabled = true; }
+    // Every door id in this world, ascending and without duplicates.
+    std::vector<int> doorIds() const;
+    bool hasDoor(int id) const;
 
     // Highest surface under p that is <= maxSurface.
     std::optional<GroundHit> ground(glm::vec2 p, float maxSurface) const;

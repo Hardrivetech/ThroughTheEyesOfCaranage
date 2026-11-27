@@ -162,7 +162,21 @@ bool World::resolveWalls(glm::vec2& p, float feetY, float radius, float step,
     return hit;
 }
 
+std::vector<int> World::doorIds() const {
+    std::vector<int> ids;
+    for (const Block& b : blocks_)
+        if (b.door >= 0) ids.push_back(b.door);
+    std::sort(ids.begin(), ids.end());
+    ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
+    return ids;
+}
+
+bool World::hasDoor(int id) const {
+    return id >= 0 && std::any_of(blocks_.begin(), blocks_.end(), [&](const Block& b) { return b.door == id; });
+}
+
 void World::setDoorOpen(int id, bool open) {
+    if (id < 0) return;  // -1 is "not a door": it must never match every ordinary block
     for (Block& b : blocks_) if (b.door == id) b.enabled = !open;
 }
 

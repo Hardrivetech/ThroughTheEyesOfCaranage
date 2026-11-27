@@ -19,6 +19,10 @@ public:
 
     float yaw() const { return yaw_; }
 
+    // Faces `yawRadians` and levels the pitch (spawn / respawn). Same convention
+    // as the movement controller: 0 faces -Z, +pi/2 faces -X.
+    void face(float yawRadians);
+
     // Aim orientation. `recoil` = (pitch, yaw) offset from weapon recoil.
     glm::quat orientation(glm::vec2 recoil = glm::vec2(0.0f)) const;
     glm::vec3 forward() const;

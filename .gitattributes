@@ -25,3 +25,4 @@ CMakeLists.txt   text eol=lf
 *.png            binary
 *.exe            binary
 *.a              binary
+*.brf            text eol=lf

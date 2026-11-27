@@ -109,9 +109,11 @@ TEST_CASE("The shipped level has the expected three-sector layout", "[level]") {
     CHECK(opens == 2);
     CHECK(prompts == 11);
 
-    // Until a briefing/hub exists, completing the level returns to the menu.
-    CHECK(L.transition == TransitionType::Menu);
-    CHECK(L.nextLevel.empty());
+    // Completing it plays the outro briefing, then arrives at the hub's landing pad.
+    CHECK(L.transition == TransitionType::Level);
+    CHECK(L.nextLevel == "kodiak_hub");
+    CHECK(L.nextSpawn == "from_level01_escape");
+    CHECK(L.briefing == "level01_outro");
 }
 
 TEST_CASE("The shipped level's tutorial prompts are well placed", "[level][prompts]") {

@@ -18,6 +18,7 @@
 #include "game/Hud.hpp"
 #include "game/Interact.hpp"
 #include "game/Level.hpp"
+#include "game/LevelGraph.hpp"
 #include "game/Movement.hpp"
 #include "game/PlayerHealth.hpp"
 #include "game/Triggers.hpp"
@@ -36,6 +37,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
@@ -91,6 +93,10 @@ int main() {
     LevelLoad loaded = loadLevelFile(firstPath);
     for (const LevelIssue& i : loaded.issues) log::warn("{}:{}: {}", firstPath, i.line, i.message);
     if (!loaded.opened) return EXIT_FAILURE;
+    // Check the whole level network once (portals, next_level, briefings, spawn names) so a
+    // broken link is reported at startup rather than when a player walks into a gate.
+    for (const std::string& p : checkLevelGraph(CARNAGE_ASSET_DIR, kFirstLevel).problems)
+        log::warn("level network: {}", p);
     // `loaded` is reassigned in place on a level switch, so these references stay valid.
     const LevelData& level = loaded.level;
     World& world = loaded.level.world;  // mutable: doors open at runtime
@@ -153,7 +159,13 @@ int main() {
     BriefingPlayer  briefing;             // lore screen between levels; the sim is frozen while active
     LevelTransition afterBriefing;        // where to go once it ends
     bool            briefingResume = false;  // a console preview: just resume play afterwards
-    glm::vec3   checkpoint = level.spawn;
+    std::string currentLevelId = kFirstLevel;
+    SpawnPoint  arrival    = level.spawnPoint();  // where the running level was entered
+    CheckpointTracker checkpoint;
+    checkpoint.arrive(arrival);
+    // Start at the level's spawn point, facing the way it says (not the controller's default).
+    player.respawn(arrival.pos);
+    camera.face(arrival.yaw);
     bool        deathHandled = false;
     bool        levelComplete = false;
     float       dmgFlash = 0.0f;
@@ -177,7 +189,7 @@ int main() {
         installTriggers(level, triggers);  // also re-arms every trigger
         prompts.clear();
         health.reset();
-        checkpoint = level.spawn;
+        checkpoint.arrive(arrival);
         deathHandled = levelComplete = false;
         completeTimer = 0.0f;
         dmgFlash = 0.0f;
@@ -194,7 +206,8 @@ int main() {
         feel    = CameraFeel{};
         blind   = Blind{};
         camera  = Camera{};
-        player.respawn(level.spawn);
+        camera.face(arrival.yaw);
+        player.respawn(arrival.pos);
         lastState = player.state();
         weapons = {makeFists(), makePistol(), makeSmg(), makeShotgun(), makeRocketLauncher()};
         current = 0;
@@ -204,13 +217,17 @@ int main() {
     };
 
     // Replaces the running level with `id` (assets/levels/<id>.lvl) and starts it
-    // fresh. Returns false, leaving the current level untouched, if it cannot be read.
-    const auto switchLevel = [&](const std::string& id) -> bool {
+    // fresh at its named spawn `spawnName` (default spawn if empty or unknown). Returns false, leaving the current level untouched, if it cannot be read.
+    const auto switchLevel = [&](const std::string& id, const std::string& spawnName = {}) -> bool {
         const std::string path = levelPath(CARNAGE_ASSET_DIR, id);
         LevelLoad next = loadLevelFile(path);
         for (const LevelIssue& i : next.issues) log::warn("{}:{}: {}", path, i.line, i.message);
         if (!next.opened) return false;
         loaded = std::move(next);
+        currentLevelId = id;
+        if (!spawnName.empty() && !level.hasSpawn(spawnName))
+            log::warn("level '{}' has no spawn '{}'; using its default spawn", id, spawnName);
+        arrival = level.spawnPoint(spawnName);
         if (!renderer::uploadWorld(world)) {
             log::error("could not upload level '{}'", id);
             renderer::requestClose();
@@ -218,6 +235,14 @@ int main() {
         buildProps();
         resetGame();
         return true;
+    };
+
+    // Back to a fresh game: the first level at its default spawn. (Leaving to the main
+    // menu from the hub must not make "Play" start in the hub.)
+    const auto resetToFirstLevel = [&] {
+        if (currentLevelId != kFirstLevel && switchLevel(kFirstLevel)) return;
+        arrival = level.spawnPoint();
+        resetGame();
     };
 
     // Starts the briefing `id` (assets/briefings/<id>.brf). Returns false, changing nothing,
@@ -239,12 +264,12 @@ int main() {
         briefing.reset();
         if (briefingResume) { briefingResume = false; return; }
         if (afterBriefing.type == TransitionType::Level) {
-            if (switchLevel(afterBriefing.next)) return;
+            if (switchLevel(afterBriefing.next, afterBriefing.spawn)) return;
             log::error("cannot load next level '{}'; returning to the menu", afterBriefing.next);
         }
         menu.showMain();
         input::setCursorCaptured(false);
-        resetGame();
+        resetToFirstLevel();
     };
 
     // World sound with occlusion: geometry between the ear and the source
@@ -354,8 +379,21 @@ int main() {
             }
             return std::format("spawned {} {}", n, k);
         });
-        console.add("tp", "tp <x> <y> <z>", [&](Args a) -> CmdResult {
-            if (a.size() < 3) return std::unexpected("usage: tp <x> <y> <z>");
+        console.add("tp", "tp <x> <y> <z> | tp <spawn name>", [&](Args a) -> CmdResult {
+            const auto spawnList = [&] {
+                std::string names = "default";
+                for (const NamedSpawn& sp : level.spawns) names += ", " + sp.name;
+                return names;
+            };
+            if (a.size() == 1 && !dev::parseFloat(a[0])) {  // a spawn name
+                if (a[0] != "default" && !level.hasSpawn(a[0]))
+                    return std::unexpected("no spawn '" + a[0] + "' in this level (spawns: " + spawnList() + ")");
+                const SpawnPoint sp = level.spawnPoint(a[0] == "default" ? std::string_view{} : std::string_view(a[0]));
+                player.respawn(sp.pos);
+                camera.face(sp.yaw);
+                return std::format("teleported to spawn {} ({:.1f} {:.1f} {:.1f})", a[0], sp.pos.x, sp.pos.y, sp.pos.z);
+            }
+            if (a.size() < 3) return std::unexpected("usage: tp <x> <y> <z> | tp <spawn name> (spawns: " + spawnList() + ")");
             const auto x = dev::parseFloat(a[0]), y = dev::parseFloat(a[1]), z = dev::parseFloat(a[2]);
             if (!x || !y || !z) return std::unexpected("tp: coordinates must be numbers");
             player.respawn({*x, *y, *z});
@@ -367,20 +405,34 @@ int main() {
                                name(player.state()), player.horizontalSpeed());
         });
         console.add("respawn", "return to the last checkpoint", [&](Args) -> CmdResult {
-            player.respawn(checkpoint);
+            player.respawn(checkpoint.current().pos);
+            camera.face(checkpoint.current().yaw);
             return std::string("respawned");
         });
+        const auto doorError = [&](int id) {
+            std::string ids;
+            for (const int d : world.doorIds()) ids += (ids.empty() ? "" : ", ") + std::to_string(d);
+            return std::format("no door {} in '{}' (doors: {})", id, currentLevelId, ids.empty() ? "none" : ids);
+        };
         console.add("open_door", "open_door <id>", [&](Args a) -> CmdResult {
             const auto id = a.empty() ? std::nullopt : dev::parseInt(a[0]);
             if (!id) return std::unexpected("usage: open_door <id>");
+            if (!world.hasDoor(*id)) return std::unexpected(doorError(*id));
             world.setDoorOpen(*id, true);
             return std::format("door {} opened", *id);
         });
         console.add("close_door", "close_door <id>", [&](Args a) -> CmdResult {
             const auto id = a.empty() ? std::nullopt : dev::parseInt(a[0]);
             if (!id) return std::unexpected("usage: close_door <id>");
+            if (!world.hasDoor(*id)) return std::unexpected(doorError(*id));
             world.setDoorOpen(*id, false);
             return std::format("door {} closed", *id);
+        });
+        console.add("level", "level <id> [spawn] - load a level (assets/levels/<id>.lvl)", [&](Args a) -> CmdResult {
+            if (a.empty() || !validLevelId(a[0])) return std::unexpected("usage: level <id> [spawn name]");
+            const std::string spawnName = a.size() > 1 ? a[1] : std::string{};
+            if (!switchLevel(a[0], spawnName)) return std::unexpected("cannot load level '" + a[0] + "' (see the log)");
+            return std::format("loaded {} at spawn {}", a[0], spawnName.empty() ? "default" : spawnName);
         });
         console.add("win", "trigger the level-complete transition", [&](Args) -> CmdResult {
             if (!levelComplete) { levelComplete = true; completeTimer = 0.0f; }
@@ -519,7 +571,7 @@ int main() {
                     case ui::MenuAction::Quit:  renderer::requestClose();        break;
                     case ui::MenuAction::MainMenu:
                         input::setCursorCaptured(false);
-                        resetGame();
+                        resetToFirstLevel();
                         break;
                     case ui::MenuAction::None:  break;
                 }
@@ -556,15 +608,19 @@ int main() {
                 deathHandled = true;
                 health.reset();
                 deathHandled = false;
-                player.respawn(checkpoint);
+                player.respawn(checkpoint.current().pos);
                 camera = Camera{};
+                camera.face(checkpoint.current().yaw);
                 trauma = TraumaManager{};
                 feel   = CameraFeel{};
                 blind  = Blind{};
                 dmgFlash = 0.0f;
                 say("CHECKPOINT RELOADED");
             }
-            if (alive && kPressed(Action::Respawn)) player.respawn(checkpoint);
+            if (alive && kPressed(Action::Respawn)) {
+                player.respawn(checkpoint.current().pos);
+                camera.face(checkpoint.current().yaw);
+            }
 
             // 1-5 equips the right hand; Alt+2..5 equips the left hand; Alt+1
             // empties it.
@@ -782,6 +838,7 @@ int main() {
             combat.clearEvents();
 
             // Objective triggers: sector clears open doors, volumes set checkpoints.
+            std::optional<std::pair<std::string, std::string>> portal;  // level id, spawn name
             for (const TriggerEvent& te : triggers.update(player.position(), [&](int s) {
                      return enemies.aliveInSector(combat, s);
                  })) {
@@ -790,10 +847,10 @@ int main() {
                         world.setDoorOpen(te.param, true);
                         audio::play(audio::Sfx::Slide, 0.9f, 0.0f, 0.5f);
                         trauma.add(0.3f);
-                        say("SECTOR CLEARED - DOOR OPEN");
+                        if (te.condition == TriggerCondition::SectorCleared) say("SECTOR CLEARED - DOOR OPEN");
                         break;
                     case TriggerAction::Checkpoint:
-                        checkpoint = te.point;
+                        checkpoint.reached(te.point, camera.yaw());
                         say("CHECKPOINT");
                         break;
                     case TriggerAction::Complete:
@@ -804,7 +861,26 @@ int main() {
                     case TriggerAction::Prompt:
                         prompts.show(expandPromptText(te.text, km), te.time, te.clearOn);
                         break;
+                    case TriggerAction::Portal:
+                        portal = {te.target, te.targetSpawn};  // acted on after the loop: it replaces the level
+                        break;
                 }
+            }
+            if (portal) {
+                // A mission gate: leave this level for another, arriving at the gate's spawn.
+                const std::string targetId = portal->first;
+                if (switchLevel(targetId, portal->second)) {
+                    audio::play(audio::Sfx::Pickup, 0.8f, 0.0f, 0.6f);
+                    std::string title = currentLevelId;
+                    std::transform(title.begin(), title.end(), title.begin(),
+                                   [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+                    say(("ENTERING " + title).c_str());
+                    input::endTick();
+                    ++ticks;
+                    return;
+                }
+                log::error("portal to '{}' failed; the level could not be loaded", targetId);
+                say("PORTAL OFFLINE");
             }
             if (levelComplete) {
                 completeTimer += fdt;
@@ -823,7 +899,7 @@ int main() {
                         log::warn("briefing '{}' could not be played; continuing without it", next.briefing);
                     }
                     if (next.type == TransitionType::Level) {
-                        if (switchLevel(next.next)) {
+                        if (switchLevel(next.next, next.spawn)) {
                             input::endTick();
                             ++ticks;
                             return;
@@ -832,7 +908,7 @@ int main() {
                     }
                     menu.showMain();
                     input::setCursorCaptured(false);
-                    resetGame();
+                    resetToFirstLevel();
                     input::endTick();
                     ++ticks;
                     return;

@@ -56,6 +56,7 @@ add_executable(Carnage
     src/game/Interact.cpp
     src/game/Level.cpp
     src/game/Briefing.cpp
+    src/game/LevelGraph.cpp
     src/game/Enemy.cpp
     src/ui/Text.cpp
     src/ui/Menu.cpp
@@ -99,14 +100,17 @@ if(CARNAGE_BUILD_TESTS)
         tests/test_level.cpp
         tests/test_prompts.cpp
         tests/test_briefing.cpp
+        tests/test_hub.cpp
         src/game/World.cpp
         src/game/Movement.cpp
+        src/game/Camera.cpp
         src/game/Combat.cpp
         src/game/Weapon.cpp
         src/game/Weapons.cpp
         src/game/Interact.cpp
         src/game/Level.cpp
         src/game/Briefing.cpp
+        src/game/LevelGraph.cpp
         src/game/Enemy.cpp
         src/ui/Menu.cpp
         src/ui/Text.cpp)

@@ -22,6 +22,11 @@ void Camera::look(glm::vec2 d) {
     yaw_    = std::remainder(yaw_, glm::two_pi<float>());
 }
 
+void Camera::face(float yawRadians) {
+    yaw_   = std::remainder(yawRadians, glm::two_pi<float>());
+    pitch_ = 0.0f;
+}
+
 glm::quat Camera::orientation(glm::vec2 recoil) const {
     const float pitch = std::clamp(pitch_ + recoil.x, -kMaxPitch, kMaxPitch);
     return glm::angleAxis(yaw_ + recoil.y, kUp) * glm::angleAxis(pitch, kRight);

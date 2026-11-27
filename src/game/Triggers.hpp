@@ -11,7 +11,7 @@ namespace carnage {
 // Lightweight objective triggers. Pure data + logic (no world, audio or
 // rendering), so enter / sector-cleared behaviour is unit-testable.
 enum class TriggerCondition { PlayerEnters, SectorCleared };
-enum class TriggerAction    { OpenDoor, Checkpoint, Complete, Prompt };
+enum class TriggerAction    { OpenDoor, Checkpoint, Complete, Prompt, Portal };
 
 struct TriggerVolume {
     glm::vec3        min{0.0f};
@@ -24,6 +24,8 @@ struct TriggerVolume {
     std::string      text;            // Prompt: text to show ({key} placeholders allowed)
     float            time      = 5.0f;  // Prompt: seconds fully visible
     PromptClear      clearOn   = PromptClear::Timer;  // Prompt: action that dismisses it early
+    std::string      target;          // Portal: level id to load
+    std::string      targetSpawn;     // Portal: named spawn point there ("" = its default)
     bool             fired     = false;
 
     bool contains(glm::vec3 p) const {
@@ -33,12 +35,15 @@ struct TriggerVolume {
 };
 
 struct TriggerEvent {
-    TriggerAction action = TriggerAction::OpenDoor;
+    TriggerAction    action    = TriggerAction::OpenDoor;
+    TriggerCondition condition = TriggerCondition::PlayerEnters;  // what fired it
     int           param  = 0;
     glm::vec3     point{0.0f};
     std::string   text;
     float         time    = 5.0f;
     PromptClear   clearOn = PromptClear::Timer;
+    std::string   target;       // Portal
+    std::string   targetSpawn;  // Portal
 };
 
 class TriggerSystem {
@@ -60,7 +65,7 @@ public:
                                  : aliveInSector(t.sector) <= 0;
             if (!met) continue;
             t.fired = true;
-            events_.push_back({t.action, t.param, t.point, t.text, t.time, t.clearOn});
+            events_.push_back({t.action, t.condition, t.param, t.point, t.text, t.time, t.clearOn, t.target, t.targetSpawn});
         }
         return events_;
     }

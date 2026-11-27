@@ -30,6 +30,30 @@ std::optional<Material> materialFor(std::string_view n) {
     return std::nullopt;
 }
 
+bool parseSpawn(Record& r, LevelData& level, bool& haveDefault) {
+    SpawnPoint p;
+    p.pos = r.vec3("pos", p.pos, true);
+    p.yaw = glm::radians(r.number("yaw", 0.0f));
+    std::string name;
+    if (const auto n = r.raw("name")) {
+        name = std::string(*n);
+        if (!rec::validId(name)) r.fail("'name' must be an id (lower-case letters, digits, _): '" + name + "'");
+        else if (name == "default") r.fail("'default' is reserved for the unnamed spawn");
+    }
+    r.finish();
+    if (r.failed()) return false;
+    if (name.empty()) {
+        if (haveDefault) return r.fail("duplicate default spawn ignored");
+        haveDefault   = true;
+        level.spawn    = p.pos;
+        level.spawnYaw = p.yaw;
+        return true;
+    }
+    if (level.hasSpawn(name)) return r.fail("duplicate spawn name '" + name + "' ignored");
+    level.spawns.push_back({std::move(name), p});
+    return true;
+}
+
 // Each parse* reads one record into `level`. They return false if the line
 // must be dropped; the reason is in `r.error()`.
 
@@ -163,6 +187,18 @@ bool parseTrigger(Record& r, LevelData& level) {
             t.point  = r.vec3("point", t.point, true);
         } else if (*doIt == "complete") {
             t.action = TriggerAction::Complete;
+        } else if (*doIt == "portal") {
+            t.action = TriggerAction::Portal;
+            if (const auto l = r.raw("level")) {
+                t.target = std::string(*l);
+                if (!validLevelId(t.target)) r.fail("'level' must be a level id (lower-case letters, digits, _): '" + t.target + "'");
+            } else {
+                r.fail("missing 'level'");
+            }
+            if (const auto sp = r.raw("spawn")) {
+                t.targetSpawn = std::string(*sp);
+                if (!rec::validId(t.targetSpawn)) r.fail("'spawn' must be a spawn name (lower-case letters, digits, _): '" + t.targetSpawn + "'");
+            }
         } else if (*doIt == "prompt") {
             t.action = TriggerAction::Prompt;
             if (const auto txt = r.raw("text")) {
@@ -187,7 +223,7 @@ bool parseTrigger(Record& r, LevelData& level) {
                 else t.clearOn = it->second;
             }
         } else {
-            r.fail("unknown 'do' value '" + std::string(*doIt) + "' (open_door, checkpoint, complete or prompt)");
+            r.fail("unknown 'do' value '" + std::string(*doIt) + "' (open_door, checkpoint, complete, prompt or portal)");
         }
     }
     r.finish();
@@ -197,7 +233,7 @@ bool parseTrigger(Record& r, LevelData& level) {
 }
 
 bool parseLevelRecord(Record& r, LevelData& level) {
-    std::string name, next, briefing;
+    std::string name, next, briefing, nextSpawn;
     if (const auto n = r.raw("name")) name = std::string(*n);
     else r.fail("missing 'name'");
 
@@ -211,6 +247,13 @@ bool parseLevelRecord(Record& r, LevelData& level) {
         next = std::string(*n);
         if (!validLevelId(next))
             r.fail("'next_level' must be a level id (lower-case letters, digits, _): '" + next + "'");
+    }
+    if (const auto sp = r.raw("next_spawn")) {
+        nextSpawn = std::string(*sp);
+        if (!rec::validId(nextSpawn))
+            r.fail("'next_spawn' must be a spawn name (lower-case letters, digits, _): '" + nextSpawn + "'");
+        else if (next.empty())
+            r.fail("'next_spawn' needs 'next_level'");
     }
     TransitionType type = next.empty() ? TransitionType::Menu : TransitionType::Level;
     if (const auto t = r.raw("transition_type")) {
@@ -229,11 +272,22 @@ bool parseLevelRecord(Record& r, LevelData& level) {
     level.name       = std::move(name);
     level.nextLevel  = std::move(next);
     level.briefing   = std::move(briefing);
+    level.nextSpawn  = std::move(nextSpawn);
     level.transition = type;
     return true;
 }
 
 } // namespace
+
+bool LevelData::hasSpawn(std::string_view name) const {
+    return std::any_of(spawns.begin(), spawns.end(), [&](const NamedSpawn& s) { return s.name == name; });
+}
+
+SpawnPoint LevelData::spawnPoint(std::string_view name) const {
+    for (const NamedSpawn& s : spawns)
+        if (!name.empty() && s.name == name) return s.point;
+    return {spawn, spawnYaw};
+}
 
 bool validLevelId(std::string_view id) { return rec::validId(id); }
 
@@ -244,8 +298,9 @@ std::string levelPath(std::string_view assetDir, std::string_view id) {
 LevelTransition completionTransition(const LevelData& level) {
     LevelTransition t;
     if (level.transition == TransitionType::Level && validLevelId(level.nextLevel)) {
-        t.type = TransitionType::Level;
-        t.next = level.nextLevel;
+        t.type  = TransitionType::Level;
+        t.next  = level.nextLevel;
+        t.spawn = level.nextSpawn;
     }
     if (validLevelId(level.briefing)) t.briefing = level.briefing;
     return t;
@@ -269,11 +324,7 @@ LevelLoad parseLevel(std::string_view text) {
             ok = parseLevelRecord(r, level);
             haveLevel = haveLevel || ok;
         } else if (kind == "spawn") {
-            if (haveSpawn) { issue(lineNo, "duplicate 'spawn' record ignored"); return; }
-            level.spawn = r.vec3("pos", level.spawn, true);
-            r.finish();
-            ok = !r.failed();
-            haveSpawn = haveSpawn || ok;
+            ok = parseSpawn(r, level, haveSpawn);
         } else if (kind == "block")   ok = parseBlock(r, level);
         else if (kind == "light")     ok = parseLight(r, level);
         else if (kind == "target")    ok = parseTarget(r, level);
