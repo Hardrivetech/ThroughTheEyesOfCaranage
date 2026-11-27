@@ -252,6 +252,28 @@ TEST_CASE("Only a few arcs are shown; the oldest is replaced", "[hud][damage]") 
     CHECK_FALSE(hasOldest);
 }
 
+TEST_CASE("When the list is full the arc closest to fading out is replaced, wherever it is", "[hud][damage]") {
+    DamageIndicators d;
+    for (std::size_t i = 0; i < DamageIndicators::kMax; ++i) {
+        d.add(-3.0f + static_cast<float>(i), 0.5f);   // arcs 0..5, one radian apart
+        d.update(0.1f);
+    }
+    d.add(-3.0f, 0.5f);   // a fresh hit on the first arc: now arc 1 is the oldest
+    REQUIRE(d.arcs().size() == DamageIndicators::kMax);
+    const float second = d.arcs()[1].angle;
+    d.add(2.64f, 0.5f);   // nowhere near any arc (the gap across +-pi is 1.28 rad)
+    REQUIRE(d.arcs().size() == DamageIndicators::kMax);
+    bool hasFirst = false, hasSecond = false, hasNew = false;
+    for (const DamageArc& a : d.arcs()) {
+        hasFirst  = hasFirst  || std::abs(a.angle - (-3.0f)) < 0.2f;
+        hasSecond = hasSecond || std::abs(a.angle - second) < 1e-4f;
+        hasNew    = hasNew    || std::abs(a.angle - 2.64f) < 1e-4f;
+    }
+    CHECK(hasFirst);       // refreshed, so it stays
+    CHECK_FALSE(hasSecond);  // the oldest went
+    CHECK(hasNew);
+}
+
 TEST_CASE("Bad arc input is ignored or clamped", "[hud][damage][malformed]") {
     DamageIndicators d;
     const float nan = std::numeric_limits<float>::quiet_NaN();
@@ -713,6 +735,20 @@ TEST_CASE("Settings opens from the keyboard, ignores navigation keys, and comes 
     (void)m.update(esc, kAspect);
     CHECK(m.screen() == Screen::Main);
     CHECK(m.focus() == 3);                          // remembers where you were
+}
+
+TEST_CASE("If the focused row becomes unavailable, Enter that tick does not fall through to another row", "[menu][hud]") {
+    Menu m;
+    m.setContext(withSave());
+    (void)m.update(moveTo({5, 5}), kAspect);
+    (void)m.update(nav(false, true), kAspect);
+    REQUIRE(m.focus() == 1);                         // CONTINUE
+
+    m.setContext({});                                // the save vanished
+    CHECK(m.update(nav(false, false, true), kAspect) == MenuAction::None);   // not NEW GAME
+    CHECK(m.active());
+    CHECK(m.focus() == 0);                           // focus fell back to the first usable row
+    CHECK(m.update(nav(false, false, true), kAspect) == MenuAction::Play);   // now Enter works again
 }
 
 TEST_CASE("ESC does nothing on the main menu", "[menu][hud]") {

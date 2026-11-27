@@ -28,7 +28,9 @@
 * **Seize / grab / human shield / throw:** a heavy melee hit staggers an enemy. A staggered enemy can be grabbed, used as a human shield that absorbs hitscan fire, or thrown to damage others.
 * **3-sector level flow:** corridor, arena and pit. Clearing a sector opens its door or gate, clearing the pit completes the level, and checkpoints are placed along the way.
 * **Player health:** health and armor with i-frames, plus a death and checkpoint-respawn flow.
-* **Menus:** main menu and settings, including rebindable keys saved to `carnage_settings.ini`.
+* **Combat HUD:** a momentum gauge that fills towards sprint and turns crimson in the speed-line tier, a `[E] SEIZE` prompt for a staggered enemy, a human-shield integrity bar with the throw prompt, fading directional damage arcs around the crosshair, and a heartbeat vignette and crosshair warning below 25 HP.
+* **Menus:** the main menu (New Game, Continue, Select Level / Hub, Settings, Quit) and the pause menu (`Esc`: Resume, Load Last Checkpoint, Save Checkpoint, Restart Level, Settings, Quit to Main Menu), usable by mouse or keyboard (`Up`/`Down` or `W`/`S`, then `Enter` or `Space`). Rebindable keys are saved to `carnage_settings.ini`.
+* **Saves:** checkpoint and mission-progress saves (below).
 
 ---
 
@@ -93,7 +95,7 @@ landing pad (south) -> plaza -> command post (north, door 0)  -> gate: Level 01 
 
 * Doors open by themselves when you walk up to them (an `enter` trigger with `do=open_door`), from either side. Each zone has a checkpoint.
 * The glowing gates are portals. `kodiak_range.lvl` is a small practice level (targets, enemies, pickups, cover) with a gate back to the hub.
-* The flow: new game -> Level 01 -> its briefing -> the hub (arriving on the landing pad) -> pick a gate. Quitting to the main menu always makes "Play" start Level 01 again.
+* The flow: new game -> Level 01 -> its briefing -> the hub (arriving on the landing pad) -> pick a gate. Quitting to the main menu always makes New Game start Level 01 again; Continue and Select Level use the save.
 * At startup the game checks the whole network (every portal and `next_level` target exists, every arrival spawn exists, every briefing loads, every level has a way back) and logs anything broken.
 
 ---
@@ -117,6 +119,22 @@ beat text="Every door behind you is sealed." image=briefings/level01_a.png hold=
 Malformed lines are skipped and reported in the log (`file:line: message`), exactly like level files.
 
 The loader (`src/game/Level.hpp`) never aborts on a bad line: it skips the line, logs `file:line: message`, and keeps loading. It also rejects typo'd keys, and drops triggers that could never work (a door id that doesn't exist, or a sector with no enemies). See the header for the full record reference.
+
+---
+
+## Saves
+
+The game saves automatically to `saves/slot1.sav` when you reach a checkpoint, go through a portal, or finish a mission, and the pause menu's **Save Checkpoint** writes it on demand. **Continue** on the main menu loads it; **Select Level / Hub** unlocks once Level 01 is complete. **New Game** starts Level 01 again but keeps your finished missions.
+
+A save holds your last checkpoint, health and armor, weapons and ammo, the off-hand weapon, and the missions you have completed. It does **not** hold the state of the world: loading rebuilds the level and puts you at the checkpoint, so enemies, doors and cleared sectors start fresh.
+
+The file is plain text in the same `key=value` style as the level files, one `save` line (it is safe to edit):
+
+```text
+save version=1 level_id=kodiak_hub spawn_pos=0,0.2,40 spawn_yaw=0 health=80 armor=25 weapons=fists,pistol,smg active_weapon=pistol ammo=pistol:7,smg:30 completed_levels=level01_escape
+```
+
+A missing, empty or damaged save is reported in the log (`[WRN]`) and ignored; out-of-range values are clamped and unknown weapons dropped. `saves/` is git-ignored.
 
 ---
 
@@ -155,6 +173,8 @@ Developer keys: `` ` `` (backtick) opens the console, `F3` toggles the dev menu 
 * `win`: trigger level completion (Level 01 then plays its briefing and moves on to the hub)
 * `level <id> [spawn]`: jump to a level, e.g. `level kodiak_hub`, `level kodiak_range from_kodiak_hub`
 * `briefing <id>`: preview a briefing from `assets/briefings/`
+* `save [slot]` / `load [slot]`: write or load a save (slots 1-9, default 1). `load` rebuilds the saved level at its checkpoint
+* `progress`: list the completed missions and whether the hub is unlocked
 
 ---
 

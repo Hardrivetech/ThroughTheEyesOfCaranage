@@ -89,7 +89,7 @@ SeizeHud seizeHud(bool holdingEnemy, bool staggeredInReach, float shieldHp, floa
         const bool ok = std::isfinite(shieldHp) && std::isfinite(shieldMaxHp) && shieldMaxHp > 0.0f;
         h.shield01   = ok ? std::clamp(shieldHp / shieldMaxHp, 0.0f, 1.0f) : 0.0f;
         h.shieldWeak = h.shield01 < kShieldWeakBelow;
-        h.throwReady = true;
+        h.throwReady = h.shield01 > 0.0f;
         h.grip01     = std::isfinite(heldSeconds) ? std::clamp(heldSeconds / kGripSeconds, 0.0f, 1.0f) : 0.0f;
     } else if (staggeredInReach) {
         h.state = SeizeState::CanSeize;

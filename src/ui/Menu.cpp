@@ -322,7 +322,11 @@ MenuAction Menu::itemScreen() {
         for (std::size_t i = 0; i < list.size(); ++i) if (enabledAt(i)) return i;
         return 0;
     };
+    // Focus moved because the screen changed, or because the focused row just became unavailable (the
+    // save disappeared). Either way an Enter in the same tick was meant for something else: ignore it.
+    bool refocused = false;
     if (focusScreen_ != screen_ || focus_ >= list.size() || !enabledAt(focus_)) {
+        refocused    = focusScreen_ == screen_;
         focusScreen_ = screen_;
         focus_       = firstEnabled();
     }
@@ -361,7 +365,7 @@ MenuAction Menu::itemScreen() {
     }
 
     if (hovered >= 0 && in_.clicked) return activate(list[static_cast<std::size_t>(hovered)]);
-    if (in_.confirm && n > 0 && enabledAt(focus_)) return activate(list[focus_]);
+    if (in_.confirm && !refocused && n > 0 && enabledAt(focus_)) return activate(list[focus_]);
     return MenuAction::None;
 }
 
