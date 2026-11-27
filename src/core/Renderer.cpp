@@ -2,6 +2,7 @@
 #include "core/Log.hpp"
 #include "core/Shadow.hpp"
 #include "game/World.hpp"
+#include "gfx/MaterialTextures.hpp"
 #include "gfx/Mesh.hpp"
 #include "gfx/Shader.hpp"
 
@@ -75,6 +76,10 @@ float materialId(Material m) { return static_cast<float>(static_cast<int>(m)); }
 // ---- shaders ------------------------------------------------------------------
 
 gfx::Shader g_scene, g_meshShader, g_shadow, g_sky, g_post, g_overlay, g_menuBg;
+
+// Texture units used by scene.frag: 5 = sun shadow map, 6/7/8 = material albedo / normal / mask arrays.
+constexpr int kUnitAlbedo = 6, kUnitNormal = 7, kUnitMask = 8;
+gfx::MaterialTextures g_materialTextures;
 
 GLuint g_menuBgTex    = 0;
 float  g_menuBgAspect = 16.0f / 9.0f;
@@ -363,6 +368,7 @@ void destroyScene() {
     g_shadowFbo = g_shadowTex = g_emptyVao = 0;
     g_scene.release(); g_meshShader.release(); g_shadow.release();
     g_sky.release(); g_post.release(); g_overlay.release(); g_menuBg.release();
+    g_materialTextures.release();
     if (g_menuBgTex) glDeleteTextures(1, &g_menuBgTex);
     g_menuBgTex = 0;
     if (g_briefTex) glDeleteTextures(1, &g_briefTex);
@@ -422,8 +428,13 @@ void shadowPass(const glm::mat4& lightVP, const BoxBatch& batch) {
 }
 
 void setLighting(const gfx::Shader& sh, const glm::vec3& eye, const SunShadow& sun, const Environment& env,
-                 std::span<const PointLight> lights) {
+                 std::span<const PointLight> lights, float time) {
     sh.set("uEye", eye);
+    sh.set("uTime", time);
+    sh.set("uSnow", env.snow);
+    sh.set("uAlbedoArr", kUnitAlbedo);
+    sh.set("uNormalArr", kUnitNormal);
+    sh.set("uMaskArr", kUnitMask);
     sh.set("uSunDir", kSunDir);
     sh.set("uSunColor", kSunColor);
     sh.set("uHaze", env.haze);
@@ -513,7 +524,7 @@ bool init() {
 
     glGenVertexArrays(1, &g_emptyVao);
     return loadShaders() && createTargets(g_fbW, g_fbH) && createShadowMap() &&
-           createDynamic() && createOverlay();
+           createDynamic() && createOverlay() && g_materialTextures.create();
 }
 
 void shutdown() {
@@ -676,8 +687,10 @@ void renderScene(const SceneParams& p, std::span<const DrawBox> boxes,
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
 
+    g_materialTextures.bind(kUnitAlbedo, kUnitNormal, kUnitMask);
+
     g_scene.use();
-    setLighting(g_scene, eye, sun, env, p.lights);
+    setLighting(g_scene, eye, sun, env, p.lights, p.time);
     g_scene.set("uViewProj", viewProj);
     g_scene.set("uModel", glm::mat4(1.0f));
     g_scene.set("uObjectNoise", 0);
@@ -686,7 +699,7 @@ void renderScene(const SceneParams& p, std::span<const DrawBox> boxes,
 
     if (!g_props.empty()) {
         g_meshShader.use();
-        setLighting(g_meshShader, eye, sun, env, p.lights);
+        setLighting(g_meshShader, eye, sun, env, p.lights, p.time);
         g_meshShader.set("uViewProj", viewProj);
         for (const Prop& pr : g_props) {
             g_meshShader.set("uModel", pr.model);
@@ -706,6 +719,7 @@ void renderScene(const SceneParams& p, std::span<const DrawBox> boxes,
         g_scene.set("uViewProj", p.viewmodelProjection * p.view);
         g_scene.set("uModel", invView);
         g_scene.set("uObjectNoise", 1);
+        g_scene.set("uSnow", 0.0f);  // no snow settles on the weapons in your hands
         drawBoxRange(vm.total);
         g_scene.set("uObjectNoise", 0);
         g_scene.set("uModel", glm::mat4(1.0f));
@@ -724,6 +738,8 @@ void renderScene(const SceneParams& p, std::span<const DrawBox> boxes,
     g_post.set("uAberration", 0.002f + 0.03f * p.shake);
     g_post.set("uExposure", kExposure);
     g_post.set("uFlash", p.flash);
+    g_post.set("uSpeedLines", std::clamp(p.fx.speedLines, 0.0f, 1.0f));
+    g_post.set("uCrimson", std::clamp(p.fx.crimson, 0.0f, 1.0f));
     glBindTextureUnit(0, g_resolveColor);
     glBindVertexArray(g_emptyVao);
     glDrawArrays(GL_TRIANGLES, 0, 3);

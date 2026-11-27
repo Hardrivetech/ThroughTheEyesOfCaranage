@@ -1,7 +1,7 @@
 # Project Status Report: *Through the Eyes of Carnage*
 
 **Date:** 2026-11-27
-**Repo:** github.com/Hardrivetech/ThroughTheEyesOfCaranage (branch `main`; Phases 1-3 of the open-world plan are committed locally and not pushed)
+**Repo:** github.com/Hardrivetech/ThroughTheEyesOfCaranage (branch `main`; Phases 1-4 of the open-world plan are committed locally and not pushed)
 **Studio:** Hardrive Technologies / Driveby Studios
 **Genre:** High-octane first-person shooter in the *Hardcore Henry* style
 **Stack:** Custom C++23 engine, OpenGL 4.6, GLFW 3.4, GLM 1.0.1, GLAD2. Vendored stb_image and miniaudio. Catch2 v3.7.1 for tests. CMake with Ninja.
@@ -12,12 +12,12 @@
 ## Health Check (verified 2026-11-27)
 | Item | Result |
 |---|---|
-| Unit tests (Linux, Debug) | **226 test cases.** On a pristine copy of the commit: 100% pass in Debug and Release, stable in 3 random orders. In the shared working tree 1 case fails for a reason outside the code (see Known Issues #8) |
+| Unit tests (Linux, Debug) | **262 test cases.** On a pristine copy of the commit: 100% pass in Debug and Release, stable in 3 random orders. In the shared working tree 1 case fails for a reason outside the code (see Known Issues #8) |
 | Compiler warnings | **0** in project code (game and tests, Debug and Release, GCC on Linux) |
-| Working tree | Phase 3 files committed. Other people's in-progress files (briefing art, audio, scripts, `level01_outro.brf`, `.gitignore`) are untracked or modified and deliberately not committed |
+| Working tree | Phase 4 files committed. Other people's in-progress files (briefing art, audio, scripts, `level01_outro.brf`, `.gitignore`) are untracked or modified and deliberately not committed |
 | Game launched or played | **No.** There was no display in the analysis environment, so rendering, audio, feel and the on-screen flow are unverified |
 | Linux release binary | `build/Carnage` in the repo directory is from Nov 22 and is stale; rebuild before playing |
-| Code size | About 12.1k lines in `src/` and 7.2k in `tests/`. Largest: `main.cpp` 1160, `Renderer.cpp` 824, `Level.cpp` 648 |
+| Code size | About 12.7k lines in `src/` and 8.0k in `tests/`. Largest: `main.cpp` 1160, `Renderer.cpp` 824, `Level.cpp` 648 |
 | Open TODO/FIXME markers | None |
 
 ## Completed Features
@@ -40,6 +40,10 @@
 - **Modular levels** (`include` record): a `.lvl` can include another (`include path=levels/pois/docks.lvl offset=120,0,-80 yaw=90 prefix=docks_`). Blocks, ramps, doors, lights, enemies, pickups, targets, triggers and named spawns are moved and rotated (quarter turns, integer-exact) into the parent. Cycles, depth beyond 8, fan-out beyond 256 and name collisions are reported as `file:line: message`, naming the included file. `LevelGraph` resolves spawns and portals in included files.
 - **Open-world environment:** a per-level `environment visibility= far= shadow=` record sets fog density, camera far plane and sun-shadow radius. Defaults reproduce the old values exactly. The shadow box snaps to texels (no shimmer), the depth range and bias scale with the radius, and shadows fade out over the outer 10% of the box. The loader warns if fog does not hide the far plane.
 - **Kodiak Island skeleton** (`kodiak_island.lvl`): 1 km x 1.4 km basin with flush roads, ridges, boulders, 21 lights, 17 enemies, and two included POIs (`pois/docks.lvl`, `pois/relay_tower.lvl`). Reached from Level 01 via `next_level=kodiak_island` (the briefing sits in between) and from the hub's third gate; it has a gate back to the hub.
+- **Materials and shaders (Phase 4):**
+  - Six texture-backed materials (`concrete_worn`, `metal_rusted`, `asphalt_wet`, `snow_packed`, `hazard_trim`, `grate_industrial`) plus an animated `portal`, chosen with `mat=<name>` on any block, ramp or door. Albedo, normal and roughness/metal/AO/glow textures are generated on the CPU at startup (`gfx/ProcTextures`, deterministic, tileable) and can be replaced from `assets/textures/`.
+  - World-space triplanar sampling with a second, larger-scale sample blended in by noise, so big surfaces don't show a grid of repeats. `environment snow=` settles snow on upward-facing weathered surfaces. Hazard stripes carry a chase light; portals pulse and scroll.
+  - Post pass: speed lines above sprint speed and a crimson vignette driven by camera trauma (`core/PostFx.hpp`). The ACES tone map and the distance haze were already in place.
 - **Dev tools:** backtick console (`god`, `infammo`, `noclip`, `freeze`, `stats`, `spawn`, `kill_all`, `tp x y z` / `tp <spawn>`, `open_door`/`close_door`, `level <id> [spawn]`, `briefing <id>`, `timescale`, `win`, and others), F3 dev menu, F4 profiler.
 - **Tests:** 226 cases across `World`, `Movement`, `Combat`/`Weapons`, levels, prompts, briefings, the hub, broadphase, sleep/wake and includes. Each phase's tests were mutation-checked by injecting bugs and confirming the suite caught them.
 
@@ -55,7 +59,10 @@
 | `e97f65b` | Kodiak hub, portals, named spawns, level network checker |
 | `63c6952` | Phase 1: broadphase grid for `World` queries |
 | `b1d2de7` | Phase 2: enemy sleep/wake and light culling |
-| Phase 3 commit | Modular `.lvl` includes, environment record, shadow/fog tuning, Kodiak Island skeleton and POIs |
+| `5f673d4` | Phase 3: modular `.lvl` includes, environment record, shadow/fog tuning, Kodiak Island skeleton and POIs |
+| Phase 4 commit | Procedural industrial materials, triplanar world shader, snow, animated portal/hazard, post effects, **fix: floors were lit from below** |
+
+**Rendering bug found in Phase 4 and fixed:** `scene.frag` flipped the normal using `gl_FrontFacing`, but the level mesh and dynamic boxes are not wound consistently, so every top face of every block (all floors) was lit as if facing down. Every level, including Level 01, was far darker than intended. The shader now picks the side from screen-space derivatives. It was found by rendering real frames on the GPU; the unit tests cannot see it.
 
 Phase 3 tests found two content bugs: a POI spawn 0.3 m above ground and roads raised 5 cm that put the default spawn inside a slab (roads are now flush).
 
@@ -71,7 +78,9 @@ Bugs found and fixed along the way: the ceiling shove (above), `World::setDoorOp
 7. **No progress persistence.** Completed missions are not remembered, so the hub has no locked or unlocked gates.
 8. **Briefing test fails in the shared working tree.** `level01_outro.brf` (another person's in-progress edit) lost its `briefing name=... title=...` header, so its name is `unnamed`. `test_briefing.cpp` "The shipped briefing loads cleanly and is wired to Level 01" reports 4 failed checks until the header is restored. The committed version passes.
 9. **Depth precision.** Near plane 0.05 and far plane 1500 on the island with a standard 32F depth buffer gives about 1 m depth resolution at 1 km, so coplanar faces can z-fight at distance. Fog hides most of it; reverse-Z is the fix. Float precision at 2 km is about 0.12 mm, so no origin shifting is needed.
-10. **Island look, scale and pacing unverified by eye.** No display was available.
+10. **Look checked on screenshots only.** Phase 4 rendered frames of the island, hub and Level 01 through the real renderer on a GPU and inspected them, but nobody has played with it. Interiors (hub command post, Level 01) are still dark and heavily noisy; Level 01's legacy materials were not touched.
+11. **Snow also settles on indoor floors** of weathered materials in a level that sets `snow=` (the shader has no notion of a roof). Use `tile`, `grate_industrial` or `hazard_trim` for interiors in snowy levels.
+12. **Grating is opaque.** The holes are drawn dark but are not see-through (and are solid for collision).
 
 Resolved earlier: line-ending churn, tracked build artifacts, out-of-date README, missing test coverage, hard-coded level data, the ceiling bug, and the compiler warning in the test suite.
 
@@ -103,4 +112,4 @@ Resolved earlier: line-ending churn, tracked build artifacts, out-of-date README
 - Who writes the real briefing text and images?
 
 ---
-*Status was derived from the git history, the source, and test runs (Debug and Release builds, 226 test cases). It was not derived from a gameplay session.*
+*Status was derived from the git history, the source, and test runs (Debug and Release builds, 262 test cases). It was not derived from a gameplay session.*

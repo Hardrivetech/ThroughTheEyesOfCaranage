@@ -133,6 +133,11 @@ public:
     bool failed() const { return !err_.empty(); }
     const std::string& error() const { return err_; }
 
+    // A problem that does not stop the record being used (e.g. an unknown material that falls
+    // back to the default). The loader reports these as issues next to the record's line.
+    void warn(std::string msg) { warnings_.push_back(std::move(msg)); }
+    const std::vector<std::string>& warnings() const { return warnings_; }
+
     float number(std::string_view key, float def) {
         const auto v = raw(key);
         if (!v) return def;
@@ -204,6 +209,7 @@ private:
     };
     std::vector<Kv> kv_;
     std::string     err_;
+    std::vector<std::string> warnings_;
 };
 
 // Calls fn(lineNo, kind, rest) for every non-blank, non-comment line of `text`

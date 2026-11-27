@@ -13,22 +13,7 @@ namespace carnage {
 
 namespace {
 
-constexpr std::array<std::pair<std::string_view, Material>, 11> kMaterials{{
-    {"concrete", Material::Concrete},      {"tile", Material::Tile},
-    {"painted_metal", Material::PaintedMetal}, {"steel", Material::Steel},
-    {"brass", Material::Brass},            {"flesh", Material::Flesh},
-    {"plastic", Material::Plastic},        {"emissive", Material::Emissive},
-    {"skin", Material::Skin},              {"cloth", Material::Cloth},
-    {"leather", Material::Leather},
-}};
-
 using rec::Record;
-
-std::optional<Material> materialFor(std::string_view n) {
-    for (const auto& [name, m] : kMaterials)
-        if (name == n) return m;
-    return std::nullopt;
-}
 
 bool parseSpawn(Record& r, LevelData& level, bool& haveDefault, bool allowDefault) {
     SpawnPoint p;
@@ -83,9 +68,17 @@ bool parseBlock(Record& r, LevelData& level) {
     b.color   = r.vec3("color", b.color, false);
     b.visible = r.flag("visible", true);
     b.door    = r.integer("door", -1);
-    if (const auto m = r.raw("material")) {
-        if (const auto mat = materialFor(*m)) b.material = *mat;
-        else r.fail("unknown material '" + std::string(*m) + "'");
+    // `mat=` is the short form of `material=`; give one of them. An unknown name keeps the block
+    // (a missing wall would break the level far worse than a wrong texture) with the default
+    // material, and the loader reports it.
+    std::optional<std::string_view> matName = r.raw("mat");
+    if (const auto longForm = r.raw("material")) {
+        if (matName) r.fail("use either 'mat' or 'material', not both");
+        else         matName = longForm;
+    }
+    if (matName) {
+        if (const auto mat = materialFromName(*matName)) b.material = *mat;
+        else r.warn("unknown material '" + std::string(*matName) + "'; using " + std::string(materialName(b.material)));
     }
     r.finish();
     if (r.failed()) return false;
@@ -322,6 +315,8 @@ bool parseEnvironment(Record& r, LevelData& level) {
     if (!r.failed() && (e.shadowRadius < Environment::kMinShadow || e.shadowRadius > Environment::kMaxShadow))
         r.fail("'shadow' must be between " + std::to_string(static_cast<int>(Environment::kMinShadow)) + " and " +
                std::to_string(static_cast<int>(Environment::kMaxShadow)) + " metres");
+    e.snow = r.number("snow", e.snow);
+    if (!r.failed() && (e.snow < 0.0f || e.snow > 1.0f)) r.fail("'snow' must be between 0 and 1");
     r.finish();
     if (r.failed()) return false;
     level.environment    = e;
@@ -478,7 +473,7 @@ Piece parsePiece(ParseCtx& ctx, std::string_view text, const std::string& file, 
         } else if (kind == "environment") {
             if (level.hasEnvironment) { issue(lineNo, "duplicate 'environment' record ignored"); return; }
             ok = parseEnvironment(r, level);
-            if (ok && !level.environment.farPlaneIsHidden())
+            if (ok && (r.has("visibility") || r.has("far")) && !level.environment.farPlaneIsHidden())
                 issue(lineNo, "environment: fog is only " + std::to_string(static_cast<int>(level.environment.fogAtFarPlane() * 100.0f)) +
                               "% opaque at the far plane (" + std::to_string(static_cast<int>(level.environment.farPlane)) +
                               " m), so the edge of the world will pop into view; make 'visibility' no larger than 'far'");
@@ -499,6 +494,7 @@ Piece parsePiece(ParseCtx& ctx, std::string_view text, const std::string& file, 
             return;
         }
         if (!ok) issue(lineNo, std::string(kind) + ": " + r.error());
+        for (const std::string& w : r.warnings()) issue(lineNo, std::string(kind) + ": " + w);
     });
     return piece;
 }

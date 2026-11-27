@@ -9,38 +9,38 @@
 # Format reference: src/game/Level.hpp.
 
 # ---- Quay and pier ---------------------------------------------------------------------------
-block min=-30,-50 max=30,0 top=0.8 color=0.40,0.40,0.38 material=concrete
-block min=-3,-90 max=3,-50 top=0.8 color=0.30,0.27,0.22 material=painted_metal
+block min=-30,-50 max=30,0 top=0.8 color=0.40,0.40,0.38 mat=concrete_worn
+block min=-3,-90 max=3,-50 top=0.8 mat=grate_industrial
 # mooring bollards along the quay edge
-block min=-24,-49 max=-23,-48 top=1.6 color=0.12,0.12,0.13 material=steel
-block min=-8,-49 max=-7,-48 top=1.6 color=0.12,0.12,0.13 material=steel
-block min=7,-49 max=8,-48 top=1.6 color=0.12,0.12,0.13 material=steel
-block min=23,-49 max=24,-48 top=1.6 color=0.12,0.12,0.13 material=steel
+block min=-24,-49 max=-23,-48 top=1.6 color=0.12,0.12,0.13 mat=metal_rusted
+block min=-8,-49 max=-7,-48 top=1.6 color=0.12,0.12,0.13 mat=metal_rusted
+block min=7,-49 max=8,-48 top=1.6 color=0.12,0.12,0.13 mat=metal_rusted
+block min=23,-49 max=24,-48 top=1.6 color=0.12,0.12,0.13 mat=metal_rusted
 
 # ---- Warehouse (west side): walls, roof and a roller door facing the yard --------------------
-block min=-30,-30 max=-29,-2 top=6.5 color=0.22,0.26,0.30 material=painted_metal
-block min=-30,-3 max=-12,-2 top=6.5 color=0.22,0.26,0.30 material=painted_metal
-block min=-30,-30 max=-12,-29 top=6.5 color=0.22,0.26,0.30 material=painted_metal
-block min=-13,-30 max=-12,-22 top=6.5 color=0.22,0.26,0.30 material=painted_metal
-block min=-13,-14 max=-12,-3 top=6.5 color=0.22,0.26,0.30 material=painted_metal
-block min=-13,-22 max=-12,-14 top=6.5 base=4.2 color=0.22,0.26,0.30 material=painted_metal
-block min=-13,-22 max=-12,-14 top=4.2 color=0.55,0.45,0.05 material=steel visible=0 door=0
-block min=-30,-30 max=-12,-2 top=7.3 base=6.5 color=0.30,0.30,0.30 material=concrete
+block min=-30,-30 max=-29,-2 top=6.5 color=0.22,0.26,0.30 mat=metal_rusted
+block min=-30,-3 max=-12,-2 top=6.5 color=0.22,0.26,0.30 mat=metal_rusted
+block min=-30,-30 max=-12,-29 top=6.5 color=0.22,0.26,0.30 mat=metal_rusted
+block min=-13,-30 max=-12,-22 top=6.5 color=0.22,0.26,0.30 mat=metal_rusted
+block min=-13,-14 max=-12,-3 top=6.5 color=0.22,0.26,0.30 mat=metal_rusted
+block min=-13,-22 max=-12,-14 top=6.5 base=4.2 color=0.22,0.26,0.30 mat=metal_rusted
+block min=-13,-22 max=-12,-14 top=4.2 mat=hazard_trim visible=0 door=0
+block min=-30,-30 max=-12,-2 top=7.3 base=6.5 color=0.30,0.30,0.30 mat=concrete_worn
 # hazard-yellow trim over the door (decorative)
-block min=-13.3,-22 max=-12.7,-14 top=4.5 base=4.2 color=3.2,2.4,0.1 material=emissive
+block min=-13.3,-22 max=-12.7,-14 top=4.5 base=4.2 mat=hazard_trim
 
 # ---- Container stacks: cover in the yard and a climbable route ---------------------------------
-block min=-6,-30 max=0,-24 top=2.6 color=0.55,0.18,0.12 material=painted_metal
-block min=-6,-30 max=0,-24 top=5.2 base=2.6 color=0.12,0.30,0.45 material=painted_metal
-block min=4,-34 max=10,-28 top=2.6 color=0.12,0.30,0.45 material=painted_metal
-block min=12,-22 max=18,-16 top=2.6 color=0.55,0.42,0.10 material=painted_metal
+block min=-6,-30 max=0,-24 top=2.6 color=0.55,0.18,0.12 mat=metal_rusted
+block min=-6,-30 max=0,-24 top=5.2 base=2.6 color=0.12,0.30,0.45 mat=metal_rusted
+block min=4,-34 max=10,-28 top=2.6 color=0.12,0.30,0.45 mat=metal_rusted
+block min=12,-22 max=18,-16 top=2.6 color=0.55,0.42,0.10 mat=metal_rusted
 # a ramp up onto that container's roof, and a low hurdle to practise vaulting
-block min=18,-22 max=24,-16 h0=2.6 h1=0.8 axis=x color=0.25,0.25,0.28 material=steel
-block min=-2,-12 max=8,-11.3 top=1.7 base=0.0 color=0.25,0.25,0.28 material=steel
+block min=18,-22 max=24,-16 h0=2.6 h1=0.8 axis=x mat=grate_industrial
+block min=-2,-12 max=8,-11.3 top=1.7 base=0.0 mat=hazard_trim
 # a gantry crane frame: a landmark you can see across the yard
-block min=22,-46 max=23,-45 top=11 color=0.55,0.10,0.08 material=painted_metal
-block min=22,-26 max=23,-25 top=11 color=0.55,0.10,0.08 material=painted_metal
-block min=22,-46 max=23,-25 top=11.8 base=11 color=0.55,0.10,0.08 material=painted_metal
+block min=22,-46 max=23,-45 top=11 color=0.55,0.10,0.08 mat=metal_rusted
+block min=22,-26 max=23,-25 top=11 color=0.55,0.10,0.08 mat=metal_rusted
+block min=22,-46 max=23,-25 top=11.8 base=11 color=0.55,0.10,0.08 mat=metal_rusted
 
 # ---- Lights -----------------------------------------------------------------------------------
 light pos=0,9,-10 color=9,8,6 radius=34

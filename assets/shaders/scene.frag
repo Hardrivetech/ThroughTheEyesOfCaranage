@@ -15,6 +15,13 @@ uniform vec3  uEye;
 uniform vec3  uSunDir;     // unit vector pointing towards the sun
 uniform vec3  uSunColor;   // HDR radiance
 uniform float uHaze;       // distance haze density, 0 disables
+uniform float uTime;       // seconds; drives the animated portal and hazard light
+uniform float uSnow;       // weather: snow settling on upward-facing weathered surfaces, 0..1
+
+// Texture-backed materials: one array layer per material (generated at startup, see gfx/ProcTextures).
+uniform sampler2DArray uAlbedoArr;   // sRGB colour
+uniform sampler2DArray uNormalArr;   // tangent-space normal (xyz), height (a)
+uniform sampler2DArray uMaskArr;     // roughness, metallic, ambient occlusion, glow
 
 uniform mat4            uLightViewProj;
 uniform sampler2DShadow uShadowMap;
@@ -120,11 +127,133 @@ Surface paintedMetal(vec3 p, vec3 n, vec3 paint) {
     return s;
 }
 
+// ---- texture-backed materials ----------------------------------------------------------------------
+
+// World metres covered by one repeat of each texture, in layer order (core/Material.hpp).
+const float TEX_METRES[6] = float[6](2.5, 2.0, 4.0, 4.0, 2.5, 1.0);
+
+// One projection of the triplanar blend: samples all three maps at `uv` and adds them, weighted,
+// to the accumulators. `axis` is the world axis the projection looks along (0 = X, 1 = Y, 2 = Z).
+//
+// `mixAmt` (0..1) picks, per point in the world, between the texture at its normal scale and the same
+// texture bigger and shifted. A big surface then never shows the same blotch repeating on a grid.
+void triplanarTap(int axis, vec2 uv, vec2 duvdx, vec2 duvdy, float layer, float w, vec3 n, float mixAmt,
+                  inout vec3 albedo, inout vec3 normal, inout vec4 mask) {
+    vec3 a  = vec3(0.0);
+    vec3 tn = vec3(0.0);
+    vec4 m  = vec4(0.0);
+    if (mixAmt < 0.999) {
+        a  += textureGrad(uAlbedoArr, vec3(uv, layer), duvdx, duvdy).rgb * (1.0 - mixAmt);
+        tn += textureGrad(uNormalArr, vec3(uv, layer), duvdx, duvdy).xyz * (1.0 - mixAmt);
+        m  += textureGrad(uMaskArr,   vec3(uv, layer), duvdx, duvdy) * (1.0 - mixAmt);
+    }
+    if (mixAmt > 0.001) {
+        vec2 uv2 = uv * 0.61 + vec2(0.37, 0.19);
+        vec2 g1 = duvdx * 0.61, g2 = duvdy * 0.61;
+        a  += textureGrad(uAlbedoArr, vec3(uv2, layer), g1, g2).rgb * mixAmt;
+        tn += textureGrad(uNormalArr, vec3(uv2, layer), g1, g2).xyz * mixAmt;
+        m  += textureGrad(uMaskArr,   vec3(uv2, layer), g1, g2) * mixAmt;
+    }
+    tn = tn * 2.0 - 1.0;
+    albedo += a * w;
+    mask   += m * w;
+    // Whiteout blend of the tangent-space normal into world space for this projection.
+    if (axis == 0) {
+        vec3 t = vec3(tn.xy + n.zy, abs(tn.z) * n.x);
+        normal += t.zyx * w;
+    } else if (axis == 1) {
+        vec3 t = vec3(tn.xy + n.xz, abs(tn.z) * n.y);
+        normal += t.xzy * w;
+    } else {
+        vec3 t = vec3(tn.xy + n.xy, abs(tn.z) * n.z);
+        normal += t.xyz * w;
+    }
+}
+
+// Hazard stripes carry a slow chase of amber light along them, so doors and wall-run lanes read
+// from a distance and in the dark. `glow` is the mask channel marking the yellow stripes.
+vec3 hazardGlow(vec3 p, float glow) {
+    float chase = pow(0.5 + 0.5 * sin(dot(p, vec3(1.0)) * 1.2 - uTime * 3.0), 6.0);
+    return vec3(1.0, 0.65, 0.08) * glow * (0.10 + 1.2 * chase);
+}
+
+// Triplanar mapping: the texture is projected along each world axis and blended by how squarely
+// the surface faces it, so a floor, wall or ramp of any size gets the same texel density with no
+// UVs and no stretching. Projections the surface barely faces are skipped (the screen-space
+// derivatives are taken first so the sampling stays valid inside the branches).
+Surface texturedSurface(int layer, vec3 p, vec3 n, vec3 col) {
+    float metres = TEX_METRES[layer];
+    float L = float(layer);
+
+    vec3 w = pow(abs(n), vec3(4.0));
+    w /= (w.x + w.y + w.z);
+    vec3 dpx = dFdx(p), dpy = dFdy(p);
+    float mixAmt = smoothstep(0.35, 0.65, vnoise(p * 0.2));
+
+    vec3 albedo = vec3(0.0), normal = vec3(0.0);
+    vec4 mask = vec4(0.0);
+    float used = 0.0;
+    if (w.x > 0.01) { triplanarTap(0, p.zy / metres, dpx.zy / metres, dpy.zy / metres, L, w.x, n, mixAmt, albedo, normal, mask); used += w.x; }
+    if (w.y > 0.01) { triplanarTap(1, p.xz / metres, dpx.xz / metres, dpy.xz / metres, L, w.y, n, mixAmt, albedo, normal, mask); used += w.y; }
+    if (w.z > 0.01) { triplanarTap(2, p.xy / metres, dpx.xy / metres, dpy.xy / metres, L, w.z, n, mixAmt, albedo, normal, mask); used += w.z; }
+    albedo /= used; normal /= used; mask /= used;
+
+    // Large-scale variation breaks up the repeat on big floors and walls.
+    float macro = mix(0.82, 1.18, vnoise(p * 0.05) * 0.6 + vnoise(p * 0.23) * 0.4);
+
+    Surface s;
+    s.albedo   = albedo * macro * clamp(col / 0.6, 0.0, 2.0);   // the block colour tints around neutral (0.6)
+    s.n        = normalize(normal);
+    s.rough    = mask.r;
+    s.metal    = mask.g;
+    s.ao       = mask.b;
+    s.emissive = layer == 4 ? hazardGlow(p, mask.a) : vec3(0.0);   // layer 4 = hazard_trim
+    return s;
+}
+
+// Snow settles on upward-facing surfaces of weathered materials. `n` is the geometric normal, not
+// the bumped one, so the cover follows the shape of the world rather than the texture.
+bool isWeathered(int mat) {
+    return mat == M_CONCRETE || mat == M_PAINTED || mat == M_CONCRETE_WORN ||
+           mat == M_METAL_RUSTED || mat == M_ASPHALT_WET;
+}
+
+void applySnow(inout Surface s, vec3 p, vec3 n) {
+    float up = smoothstep(0.7, 0.9, n.y);
+    if (up <= 0.0) return;
+    // Patchy, not a blanket: the noise threshold falls as the weather gets heavier.
+    float weather   = clamp(uSnow, 0.0, 1.0);
+    float threshold = mix(1.2, 0.3, weather * sqrt(weather));
+    float cover = up * smoothstep(threshold - 0.12, threshold + 0.12, fbm(p * 1.3));
+    if (cover <= 0.0) return;
+
+    vec3 snow = vec3(0.86, 0.90, 0.95) * (0.92 + 0.10 * vnoise(p * 40.0));
+    s.albedo   = mix(s.albedo, snow, cover);
+    s.rough    = mix(s.rough, 0.6, cover);
+    s.metal    = mix(s.metal, 0.0, cover);
+    s.ao       = mix(s.ao, 1.0, cover * 0.7);
+    s.emissive *= 1.0 - cover;
+    s.n        = normalize(mix(s.n, bump(n, noiseGrad(p, 9.0) * 0.05), cover));  // soft drifts
+}
+
+// Animated emissive for mission gates and checkpoints: bands of energy drifting upward, a fine
+// scan line, a fast flicker, and a bright rim where the surface turns away from the eye.
+vec3 portalColor(vec3 p, vec3 n, vec3 V, vec3 base) {
+    float band  = 0.5 + 0.5 * sin(p.y * 6.0 - uTime * 3.0 + (p.x + p.z) * 1.5);
+    float scan  = 0.5 + 0.5 * sin(p.y * 40.0 - uTime * 9.0);
+    float flick = 0.92 + 0.08 * sin(uTime * 23.0 + dot(p, vec3(3.1, 1.7, 2.3)));
+    float rim   = pow(1.0 - abs(dot(n, V)), 2.0);
+    return base * (0.9 + 1.4 * band * band + 0.4 * scan + 1.2 * rim) * flick;
+}
+
 Surface surfaceFor(int mat, vec3 p, vec3 n, vec3 col) {
     Surface s;
     if (mat == M_CONCRETE) return concrete(p, n, col);
     if (mat == M_TILE)     return tile(p, n, col);
     if (mat == M_PAINTED)  return paintedMetal(p, n, col);
+    if (mat >= M_CONCRETE_WORN && mat <= M_GRATE_INDUSTRIAL) {
+        return texturedSurface(mat - M_CONCRETE_WORN, p, n, col);
+    }
 
     s.n = n;
     s.ao = 1.0;
@@ -248,7 +377,11 @@ vec3 shade(Surface s, vec3 pos, vec3 V) {
 
 void main() {
     vec3 N = normalize(vNormal);
-    if (!gl_FrontFacing) N = -N;
+    // Turn the normal towards the viewer. gl_FrontFacing cannot be used for this: the level mesh and
+    // the dynamic boxes are not wound consistently, so it reports many outward faces (every top
+    // face of a block, for one) as back-facing and would light them from below. The screen-space
+    // derivatives give the true side of the surface whatever the winding.
+    if (dot(N, cross(dFdx(vWorld), dFdy(vWorld))) < 0.0) N = -N;
     vec3 toEye = uEye - vWorld;
     float dist = length(toEye);
     vec3 V = toEye / max(dist, 1e-4);
@@ -256,8 +389,11 @@ void main() {
     vec3 color;
     if (vMat == M_EMISSIVE) {
         color = vColor * 5.0;
+    } else if (vMat == M_PORTAL) {
+        color = portalColor(vWorld, N, V, vColor);
     } else {
         Surface s = surfaceFor(vMat, vNoise, N, vColor);
+        if (uSnow > 0.0 && isWeathered(vMat)) applySnow(s, vNoise, N);
         color = shade(s, vWorld, V);
     }
 

@@ -14,64 +14,65 @@
 # Format reference: src/game/Level.hpp. Yaw is in degrees: 0 faces -Z (north), 90 faces -X.
 
 level name=kodiak_hub
+environment snow=0.5
 spawn pos=0,0.2,40 yaw=0
 spawn name=from_level01_escape pos=0,0.2,40 yaw=0
 spawn name=from_kodiak_range pos=24,0,-8.5 yaw=90
 spawn name=from_kodiak_island pos=-23,0,25 yaw=-90
 
 # ---- Ground and the island's outer cliffs -------------------------------------------------
-block min=-30,-61 max=31,51 top=0 color=0.36,0.38,0.35 material=concrete
-block min=-31,-61 max=-30,51 top=7 color=0.18,0.22,0.26 material=painted_metal
-block min=30,-61 max=31,51 top=7 color=0.18,0.22,0.26 material=painted_metal
-block min=-30,50 max=30,51 top=7 color=0.18,0.22,0.26 material=painted_metal
-block min=-30,-61 max=30,-60 top=7 color=0.18,0.22,0.26 material=painted_metal
+block min=-30,-61 max=31,51 top=0 mat=asphalt_wet
+block min=-31,-61 max=-30,51 top=7 color=0.18,0.22,0.26 mat=concrete_worn
+block min=30,-61 max=31,51 top=7 color=0.18,0.22,0.26 mat=concrete_worn
+block min=-30,50 max=30,51 top=7 color=0.18,0.22,0.26 mat=concrete_worn
+block min=-30,-61 max=30,-60 top=7 color=0.18,0.22,0.26 mat=concrete_worn
 
 # ---- Landing pad (south) --------------------------------------------------------------------
-block min=-8,28 max=8,46 top=0.2 color=0.25,0.25,0.28 material=steel
-block min=-14,30 max=-11,33 top=1.1 color=0.55,0.24,0.12 material=painted_metal
-block min=11,36 max=14,39 top=1.4 color=0.55,0.24,0.12 material=painted_metal
+block min=-8,28 max=8,46 top=0.2 mat=grate_industrial
+block min=-14,30 max=-11,33 top=1.1 color=0.55,0.24,0.12 mat=metal_rusted
+block min=11,36 max=14,39 top=1.4 color=0.55,0.24,0.12 mat=metal_rusted
 
 # ---- Plaza west gate: to the open Kodiak Basin (the decorative frame; the portal trigger is below) ---
-block min=-30,21.4 max=-29,22 top=4.2 color=0.3,2.4,3 material=emissive
-block min=-30,28 max=-29,28.6 top=4.2 color=0.3,2.4,3 material=emissive
-block min=-30,21.4 max=-29,28.6 top=4.8 base=4.2 color=0.3,2.4,3 material=emissive
+block min=-30,21.4 max=-29,22 top=4.2 color=0.3,2.4,3 mat=portal
+block min=-30,28 max=-29,28.6 top=4.2 color=0.3,2.4,3 mat=portal
+block min=-30,21.4 max=-29,28.6 top=4.8 base=4.2 color=0.3,2.4,3 mat=portal
 
 # ---- Plaza (middle): cover, a vault hurdle, and a ramp up to a platform ---------------------
-block min=-4,-6 max=-1.5,-3.5 top=1.1 color=0.55,0.24,0.12 material=painted_metal
-block min=2,2 max=5,4.5 top=1.4 color=0.55,0.24,0.12 material=painted_metal
-block min=3,8 max=12,8.7 top=0.9 color=0.25,0.25,0.28 material=steel
-block min=-18,0 max=-12,12 h0=2 h1=0 axis=z color=0.55,0.24,0.12 material=painted_metal
-block min=-20,-10 max=-12,0 top=2 color=0.25,0.25,0.28 material=steel
+block min=-4,-6 max=-1.5,-3.5 top=1.1 color=0.55,0.24,0.12 mat=metal_rusted
+block min=2,2 max=5,4.5 top=1.4 color=0.55,0.24,0.12 mat=metal_rusted
+block min=3,8 max=12,8.7 top=0.9 mat=hazard_trim
+block min=-18,0 max=-12,12 h0=2 h1=0 axis=z mat=grate_industrial
+block min=-20,-10 max=-12,0 top=2 mat=grate_industrial
 
 # ---- Command post (north): south wall with door 0, side and back walls, roof ----------------
-block min=-14,-31 max=-4,-30 top=6 color=0.48,0.48,0.46 material=concrete
-block min=4,-31 max=14,-30 top=6 color=0.48,0.48,0.46 material=concrete
-block min=-4,-31 max=4,-30 top=6 base=4.2 color=0.48,0.48,0.46 material=concrete
-block min=-4,-31 max=4,-30 top=4.2 color=0.25,0.25,0.28 material=steel visible=0 door=0
-block min=-14,-58 max=-13,-31 top=6 color=0.18,0.22,0.26 material=painted_metal
-block min=13,-58 max=14,-31 top=6 color=0.18,0.22,0.26 material=painted_metal
-block min=-14,-59 max=14,-58 top=6 color=0.18,0.22,0.26 material=painted_metal
-block min=-14,-59 max=14,-30 top=6.8 base=6 color=0.48,0.48,0.46 material=concrete
-block min=-10,-40 max=-6,-38 top=1 color=0.25,0.25,0.28 material=steel
-block min=6,-40 max=10,-38 top=1 color=0.25,0.25,0.28 material=steel
+block min=-14,-31 max=-4,-30 top=6 color=0.48,0.48,0.46 mat=concrete_worn
+block min=4,-31 max=14,-30 top=6 color=0.48,0.48,0.46 mat=concrete_worn
+block min=-4,-31 max=4,-30 top=6 base=4.2 color=0.48,0.48,0.46 mat=concrete_worn
+block min=-4,-31 max=4,-30 top=4.2 mat=hazard_trim visible=0 door=0
+block min=-14,-58 max=-13,-31 top=6 color=0.18,0.22,0.26 mat=metal_rusted
+block min=13,-58 max=14,-31 top=6 color=0.18,0.22,0.26 mat=metal_rusted
+block min=-14,-59 max=14,-58 top=6 color=0.18,0.22,0.26 mat=metal_rusted
+block min=-14,-59 max=14,-30 top=6.8 base=6 color=0.48,0.48,0.46 mat=concrete_worn
+block min=-10,-40 max=-6,-38 top=1 mat=metal_rusted
+block min=6,-40 max=10,-38 top=1 mat=metal_rusted
 block min=-1,-45 max=1,-35 top=5.98 base=5.85 color=3,2.5,1.8 material=emissive
 # Mission gate: ESCAPE (the glowing frame is decoration; the portal trigger is below)
-block min=-3.2,-57.5 max=-2.6,-56.5 top=4.2 color=0.3,2.4,3 material=emissive
-block min=2.6,-57.5 max=3.2,-56.5 top=4.2 color=0.3,2.4,3 material=emissive
-block min=-3.2,-57.5 max=3.2,-56.5 top=4.8 base=4.2 color=0.3,2.4,3 material=emissive
+block min=-3.2,-57.5 max=-2.6,-56.5 top=4.2 color=0.3,2.4,3 mat=portal
+block min=2.6,-57.5 max=3.2,-56.5 top=4.2 color=0.3,2.4,3 mat=portal
+block min=-3.2,-57.5 max=3.2,-56.5 top=4.8 base=4.2 color=0.3,2.4,3 mat=portal
 
 # ---- East yard: west wall with door 1, north and south walls --------------------------------
-block min=16,-30 max=17,-10 top=5 color=0.48,0.48,0.46 material=concrete
-block min=16,-4 max=17,0 top=5 color=0.48,0.48,0.46 material=concrete
-block min=16,-10 max=17,-4 top=5 base=4.2 color=0.48,0.48,0.46 material=concrete
-block min=16,-10 max=17,-4 top=4.2 color=0.25,0.25,0.28 material=steel visible=0 door=1
-block min=16,-31 max=30,-30 top=5 color=0.48,0.48,0.46 material=concrete
-block min=16,0 max=30,1 top=5 color=0.48,0.48,0.46 material=concrete
-block min=19,-24 max=22,-22 top=1.1 color=0.55,0.24,0.12 material=painted_metal
+block min=16,-30 max=17,-10 top=5 color=0.48,0.48,0.46 mat=concrete_worn
+block min=16,-4 max=17,0 top=5 color=0.48,0.48,0.46 mat=concrete_worn
+block min=16,-10 max=17,-4 top=5 base=4.2 color=0.48,0.48,0.46 mat=concrete_worn
+block min=16,-10 max=17,-4 top=4.2 mat=hazard_trim visible=0 door=1
+block min=16,-31 max=30,-30 top=5 color=0.48,0.48,0.46 mat=concrete_worn
+block min=16,0 max=30,1 top=5 color=0.48,0.48,0.46 mat=concrete_worn
+block min=19,-24 max=22,-22 top=1.1 color=0.55,0.24,0.12 mat=metal_rusted
 # Mission gate: PROVING GROUND (practice range)
-block min=28.6,-17.5 max=29.6,-16.9 top=4.2 color=0.3,2.4,3 material=emissive
-block min=28.6,-13.1 max=29.6,-12.5 top=4.2 color=0.3,2.4,3 material=emissive
-block min=28.6,-17.5 max=29.6,-12.5 top=4.8 base=4.2 color=0.3,2.4,3 material=emissive
+block min=28.6,-17.5 max=29.6,-16.9 top=4.2 color=0.3,2.4,3 mat=portal
+block min=28.6,-13.1 max=29.6,-12.5 top=4.2 color=0.3,2.4,3 mat=portal
+block min=28.6,-17.5 max=29.6,-12.5 top=4.8 base=4.2 color=0.3,2.4,3 mat=portal
 
 # ---- Lights ----------------------------------------------------------------------------------
 light pos=0,7,40 color=9,8,6 radius=24

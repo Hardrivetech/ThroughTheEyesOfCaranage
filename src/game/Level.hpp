@@ -26,11 +26,13 @@ namespace carnage {
 //
 //   level   name=<id> [next_level=<id> [next_spawn=<name>]] [transition_type=menu|level] [briefing=<id>]
 //   spawn   pos=x,y,z [yaw=<degrees>] [name=<id>]
-//   environment [visibility=<m>] [far=<m>] [shadow=<m>]
+//   environment [visibility=<m>] [far=<m>] [shadow=<m>] [snow=0..1]
 //   include path=levels/pois/<file>.lvl [offset=x,y,z] [yaw=0|90|180|270] [prefix=<id>]
 //           [door_offset=<n>] [sector_offset=<n>]
 //   block   min=x,z max=x,z (top=h | h0=h h1=h axis=x|z)
-//           [base=h] [color=r,g,b] [material=<name>] [visible=0|1] [door=<id>]
+//           [base=h] [color=r,g,b] [mat=<name>] [visible=0|1] [door=<id>]
+//           (`material=` is the older spelling of `mat=`. Names: see kMaterialNames in core/Material.hpp;
+//           an unknown name keeps the block with the default material and reports an issue.)
 //   light   pos=x,y,z [color=r,g,b] [radius=m]
 //   target  pos=x,y,z [patrol=m]
 //   enemy   pos=x,y,z type=melee|ranged [sector=<id>]

@@ -8,7 +8,8 @@
 #   block min=x,z max=x,z top=<height>                     flat-topped box
 #   block ... h0=<h> h1=<h> axis=x|z                       ramp: height h0 at min[axis], h1 at max[axis]
 #   base=<h> is the underside (default -0.2), door=<id> makes a closable door.
-# Materials: concrete tile painted_metal steel brass flesh plastic emissive skin cloth leather
+# Materials (block mat=<name>): concrete tile painted_metal steel brass flesh plastic emissive skin cloth leather
+#   and the textured outdoor set: concrete_worn metal_rusted asphalt_wet snow_packed hazard_trim grate_industrial portal
 
 level name=level01_escape briefing=level01_outro next_level=kodiak_island next_spawn=from_level01_escape
 # On completion the game plays the briefing assets/briefings/level01_outro.brf (ESC skips it),

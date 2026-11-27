@@ -62,7 +62,9 @@ add_executable(Carnage
     src/ui/Menu.cpp
     src/gfx/Assets.cpp
     src/gfx/Humanoid.cpp
+    src/gfx/MaterialTextures.cpp
     src/gfx/Mesh.cpp
+    src/gfx/ProcTextures.cpp
     src/gfx/Shader.cpp)
 target_include_directories(Carnage PRIVATE src)
 # Vendored single-header libs (stb_image, miniaudio); SYSTEM keeps their warnings out.
@@ -104,6 +106,7 @@ if(CARNAGE_BUILD_TESTS)
         tests/test_broadphase.cpp
         tests/test_wake.cpp
         tests/test_include.cpp
+        tests/test_materials.cpp
         src/game/World.cpp
         src/game/Movement.cpp
         src/game/Camera.cpp
@@ -115,6 +118,7 @@ if(CARNAGE_BUILD_TESTS)
         src/game/Briefing.cpp
         src/game/LevelGraph.cpp
         src/game/Enemy.cpp
+        src/gfx/ProcTextures.cpp
         src/ui/Menu.cpp
         src/ui/Text.cpp)
     target_include_directories(CarnageTests PRIVATE src)

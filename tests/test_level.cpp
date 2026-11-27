@@ -460,7 +460,6 @@ TEST_CASE("Each kind of malformed line is skipped with a useful message", "[leve
         {"block min=0,0 max=1,1 h0=1 h1=2 axis=y",               "'axis' must be x or z"},
         {"block min=0,0 max=1,1 top=1 h0=1",                     "either 'top' or"},
         {"block min=0,0 max=1,1 top=1 materal=steel",            "unknown key 'materal'"},
-        {"block min=0,0 max=1,1 top=1 material=marshmallow",     "unknown material"},
         {"block min=0,0 max=1,1 top=1 visible=maybe",            "must be 0 or 1"},
         {"block min=0,0 max=1,1 top=1 door=x",                   "not an integer"},
         {"block min=1,0 max=0,1 top=1",                          "'max' must be greater"},

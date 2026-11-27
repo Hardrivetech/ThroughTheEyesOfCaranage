@@ -943,7 +943,9 @@ TEST_CASE("The other shipped levels keep the old fog and shadow values", "[islan
         INFO(id);
         const LevelLoad r = loadLevelFile(std::string(CARNAGE_ASSET_DIR) + "/levels/" + id + ".lvl");
         REQUIRE(r.clean());
-        CHECK(r.level.environment == Environment{});
+        Environment e = r.level.environment;
+        e.snow = 0.0f;  // weather is the one thing the hub sets (see test_materials.cpp); fog and shadows are untouched
+        CHECK(e == Environment{});
     }
 }
 

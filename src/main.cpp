@@ -1016,6 +1016,10 @@ int main() {
             sp.env   = level.environment;
             sp.shake = trauma.shake() * menu.settings().shake;
             sp.flash = blind.sample(a);
+            {
+                static const MovementConfig moveCfg{};  // the player runs on the defaults
+                sp.fx = computePostFx(player.horizontalSpeed(), moveCfg.sprintSpeed, moveCfg.maxSpeed, sp.shake);
+            }
 
             boxes.clear();
             // 3D Player Character body (visible in shadows & when looking down)

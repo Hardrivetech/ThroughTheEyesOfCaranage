@@ -15,6 +15,14 @@ const int M_EMISSIVE = 7;
 const int M_SKIN     = 8;
 const int M_CLOTH    = 9;
 const int M_LEATHER  = 10;
+// Texture-backed materials (layer = value - 11) and the animated portal.
+const int M_CONCRETE_WORN    = 11;
+const int M_METAL_RUSTED     = 12;
+const int M_ASPHALT_WET      = 13;
+const int M_SNOW_PACKED      = 14;
+const int M_HAZARD_TRIM      = 15;
+const int M_GRATE_INDUSTRIAL = 16;
+const int M_PORTAL           = 17;
 
 // ---- noise ------------------------------------------------------------------
 
