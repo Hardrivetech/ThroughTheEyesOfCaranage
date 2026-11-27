@@ -1,5 +1,6 @@
 #pragma once
 #include "core/DrawTypes.hpp"
+#include "core/Environment.hpp"
 
 #include <glm/mat4x4.hpp>
 
@@ -57,6 +58,7 @@ struct SceneParams {
     float     shake = 0.0f;  // trauma^2, drives chromatic aberration
     float     flash = 0.0f;  // muzzle blind, 0..1
     std::span<const PointLight> lights;  // first 8 are used
+    Environment env;                     // fog density and shadow reach (sanitized before use)
 };
 
 // Renders the whole 3D frame: sun shadow pass, HDR sky + level + props +

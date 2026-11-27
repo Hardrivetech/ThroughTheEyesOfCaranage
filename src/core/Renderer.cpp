@@ -1,5 +1,6 @@
 #include "core/Renderer.hpp"
 #include "core/Log.hpp"
+#include "core/Shadow.hpp"
 #include "game/World.hpp"
 #include "gfx/Mesh.hpp"
 #include "gfx/Shader.hpp"
@@ -33,14 +34,11 @@ constexpr const char* kTitle   = "Through the Eyes of Carnage";
 constexpr float       kBottom  = -0.2f; // visual underside of every block
 
 constexpr int   kMsaaSamples = 4;
-constexpr int   kShadowSize  = 4096;
-constexpr float kShadowRadius = 50.0f;   // half-width of the sun ortho box (m)
-constexpr float kShadowDepth  = 120.0f;  // half-depth along the sun direction (m)
+constexpr int   kShadowSize  = kShadowMapSize;   // the sun box's radius and depth come from the level's Environment
 constexpr int   kMaxLights    = 8;
 
 const glm::vec3 kSunDir   = glm::normalize(glm::vec3(0.50f, 0.55f, 0.40f));
 const glm::vec3 kSunColor = glm::vec3(4.2f, 3.0f, 2.1f);
-constexpr float kHaze     = 0.0045f;
 constexpr float kExposure = 1.0f;
 
 GLFWwindow* g_window    = nullptr;
@@ -393,23 +391,6 @@ void onFramebufferResize(GLFWwindow*, int w, int h) {
 
 // ---- frame helpers ------------------------------------------------------------
 
-// Sun ortho matrix centred ahead of the camera, snapped to shadow texels so
-// edges don't crawl as the camera moves.
-glm::mat4 sunViewProj(const glm::vec3& eye, const glm::vec3& forward) {
-    const glm::vec3 centre = eye + glm::vec3(forward.x, 0.0f, forward.z) * (kShadowRadius * 0.4f);
-    const glm::mat4 lightView = glm::lookAt(glm::vec3(0.0f), -kSunDir, glm::vec3(0.0f, 1.0f, 0.0f));
-
-    glm::vec3 c = glm::vec3(lightView * glm::vec4(centre, 1.0f));
-    const float texel = 2.0f * kShadowRadius / static_cast<float>(kShadowSize);
-    c.x = std::floor(c.x / texel) * texel;
-    c.y = std::floor(c.y / texel) * texel;
-
-    const glm::mat4 proj = glm::ortho(c.x - kShadowRadius, c.x + kShadowRadius,
-                                      c.y - kShadowRadius, c.y + kShadowRadius,
-                                      -c.z - kShadowDepth, -c.z + kShadowDepth);
-    return proj * lightView;
-}
-
 void drawLevel() {
     if (!g_vao) return;
     glBindVertexArray(g_vao);
@@ -440,15 +421,16 @@ void shadowPass(const glm::mat4& lightVP, const BoxBatch& batch) {
     glDisable(GL_POLYGON_OFFSET_FILL);
 }
 
-void setLighting(const gfx::Shader& sh, const glm::vec3& eye, const glm::mat4& lightVP,
+void setLighting(const gfx::Shader& sh, const glm::vec3& eye, const SunShadow& sun, const Environment& env,
                  std::span<const PointLight> lights) {
     sh.set("uEye", eye);
     sh.set("uSunDir", kSunDir);
     sh.set("uSunColor", kSunColor);
-    sh.set("uHaze", kHaze);
-    sh.set("uLightViewProj", lightVP);
+    sh.set("uHaze", env.haze);
+    sh.set("uLightViewProj", sun.viewProj);
     sh.set("uShadowMap", 5);
-    sh.set("uShadowTexel", 2.0f * kShadowRadius / static_cast<float>(kShadowSize));
+    sh.set("uShadowTexel", sun.texel);
+    sh.set("uShadowBias", sun.bias);
 
     glm::vec4 posR[kMaxLights]{};
     glm::vec3 col[kMaxLights]{};
@@ -665,7 +647,9 @@ void renderScene(const SceneParams& p, std::span<const DrawBox> boxes,
     const glm::vec3 eye     = glm::vec3(invView[3]);
     const glm::vec3 forward = -glm::vec3(invView[2]);
     const glm::mat4 viewProj = p.projection * p.view;
-    const glm::mat4 lightVP  = sunViewProj(eye, forward);
+    const Environment env    = sanitized(p.env);
+    const SunShadow   sun    = computeSunShadow(eye, forward, kSunDir, env.shadowRadius, kShadowSize);
+    const glm::mat4   lightVP = sun.viewProj;
 
     glEnable(GL_DEPTH_TEST);
     glDepthMask(GL_TRUE);
@@ -693,7 +677,7 @@ void renderScene(const SceneParams& p, std::span<const DrawBox> boxes,
     glEnable(GL_DEPTH_TEST);
 
     g_scene.use();
-    setLighting(g_scene, eye, lightVP, p.lights);
+    setLighting(g_scene, eye, sun, env, p.lights);
     g_scene.set("uViewProj", viewProj);
     g_scene.set("uModel", glm::mat4(1.0f));
     g_scene.set("uObjectNoise", 0);
@@ -702,7 +686,7 @@ void renderScene(const SceneParams& p, std::span<const DrawBox> boxes,
 
     if (!g_props.empty()) {
         g_meshShader.use();
-        setLighting(g_meshShader, eye, lightVP, p.lights);
+        setLighting(g_meshShader, eye, sun, env, p.lights);
         g_meshShader.set("uViewProj", viewProj);
         for (const Prop& pr : g_props) {
             g_meshShader.set("uModel", pr.model);

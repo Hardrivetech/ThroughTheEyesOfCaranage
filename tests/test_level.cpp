@@ -111,7 +111,7 @@ TEST_CASE("The shipped level has the expected three-sector layout", "[level]") {
 
     // Completing it plays the outro briefing, then arrives at the hub's landing pad.
     CHECK(L.transition == TransitionType::Level);
-    CHECK(L.nextLevel == "kodiak_hub");
+    CHECK(L.nextLevel == "kodiak_island");
     CHECK(L.nextSpawn == "from_level01_escape");
     CHECK(L.briefing == "level01_outro");
 }

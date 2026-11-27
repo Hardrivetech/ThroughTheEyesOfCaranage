@@ -13,6 +13,7 @@ class Camera {
 public:
     float sensitivity = 0.0022f;  // radians per mouse count
     float fovDegrees  = 90.0f;
+    float farPlane    = 300.0f;   // far clip distance (a level's Environment sets it)
 
     // Render rate: apply raw mouse delta (pixels) immediately for low latency.
     void look(glm::vec2 mouseDelta);

@@ -1,0 +1,131 @@
+# Kodiak Island - the open basin. The post-escape destination: one contiguous map about
+# 1 km x 1.4 km, built from a base terrain plus modular points of interest (POIs).
+#
+# There is NO streaming: the whole basin is one level, kept cheap by the World broadphase grid
+# (queries touch only nearby blocks), distance-based enemy sleeping (far enemies do not think),
+# and per-frame light culling. `environment` below sets fog thick enough to hide the far clip.
+#
+# Layout (north is -Z; the beach where you arrive is at z = +60):
+#
+#   z = -1050  RELAY TOWER   (pois/relay_tower.lvl, west of the road)
+#   z = -720   east ridge  /  z = -400 west ridge
+#   z = -300   DOCKS         (pois/docks.lvl, east coast, turned 270 degrees so the sea is to the east)
+#   z =  +60   the beach: arrival, and a gate back to the hub
+#
+# Each POI is a separate file in its own coordinates, placed with an `include` record. Door and
+# sector ids are global, so each include gets its own door_offset / sector_offset, and a prefix
+# for its named spawns (dock_landing, relay_gate). Reserved sites for more POIs are marked below.
+# Format reference: src/game/Level.hpp.
+
+level name=kodiak_island
+environment visibility=1100 far=1500 shadow=90
+
+spawn pos=0,0,60 yaw=0
+spawn name=from_level01_escape pos=0,0,60 yaw=0
+spawn name=from_kodiak_hub pos=10,0,52 yaw=0
+
+# ---- Terrain: the basin floor and the cliffs around it (X -500..500, Z -1300..100) -------------
+block min=-500,-1300 max=500,100 top=0 color=0.31,0.32,0.30 material=concrete
+block min=-520,-1320 max=-500,120 top=45 color=0.20,0.22,0.24 material=concrete
+block min=500,-1320 max=520,120 top=45 color=0.20,0.22,0.24 material=concrete
+block min=-520,-1320 max=520,-1300 top=45 color=0.20,0.22,0.24 material=concrete
+block min=-520,100 max=520,120 top=45 color=0.20,0.22,0.24 material=concrete
+
+# ---- Roads: the main road north, and spurs to the two POIs. Flush with the ground (same top height), so there is no
+#      lip to trip over at sprint speed; the dark colour makes them read as roads. The later blocks win where they overlap. -------------------------------------
+block min=-5,-1250 max=5,85 top=0.0 color=0.11,0.11,0.12 material=concrete
+block min=5,-305 max=380,-295 top=0.0 color=0.11,0.11,0.12 material=concrete
+block min=-125,-1005 max=-5,-995 top=0.0 color=0.11,0.11,0.12 material=concrete
+block min=-125,-1030 max=-115,-995 top=0.0 color=0.11,0.11,0.12 material=concrete   # up to the tower gate
+# a ramp from the road up onto the quay (the docks' deck is 0.8 m above the ground)
+block min=368,-312 max=380,-288 h0=0.0 h1=0.8 axis=x color=0.40,0.40,0.38 material=concrete
+
+# ---- Landforms: two ridges with ramps up their sides, and a long retaining wall ------------------
+block min=-260,-460 max=-140,-340 top=14 color=0.27,0.29,0.26 material=concrete
+block min=-140,-420 max=-80,-380 h0=14 h1=0 axis=x color=0.27,0.29,0.26 material=concrete
+block min=140,-720 max=260,-620 top=10 color=0.27,0.29,0.26 material=concrete
+block min=80,-690 max=140,-650 h0=0 h1=10 axis=x color=0.27,0.29,0.26 material=concrete
+block min=-12,-820 max=-10,-720 top=9 color=0.45,0.12,0.08 material=painted_metal
+
+# ---- Boulders and wrecks along the road: cover and landmarks ----------------------------------------
+block min=-14,-85 max=-8,-80 top=2.2 color=0.38,0.36,0.32 material=concrete
+block min=14,-180 max=18,-175 top=2.2 color=0.33,0.33,0.31 material=concrete
+block min=-45,-273 max=-41,-270 top=1.4 color=0.33,0.33,0.31 material=concrete
+block min=22,-368 max=26,-365 top=4.0 color=0.33,0.33,0.31 material=concrete
+block min=-14,-467 max=-8,-460 top=1.4 color=0.33,0.33,0.31 material=concrete
+block min=22,-562 max=25,-555 top=2.2 color=0.38,0.36,0.32 material=concrete
+block min=-45,-655 max=-41,-650 top=1.4 color=0.38,0.36,0.32 material=concrete
+block min=14,-748 max=20,-745 top=2.2 color=0.33,0.33,0.31 material=concrete
+block min=-22,-843 max=-16,-840 top=1.4 color=0.33,0.33,0.31 material=concrete
+block min=31,-942 max=34,-935 top=4.0 color=0.29,0.30,0.28 material=concrete
+block min=-45,-1033 max=-39,-1030 top=3.1 color=0.38,0.36,0.32 material=concrete
+block min=45,-1130 max=51,-1125 top=4.0 color=0.38,0.36,0.32 material=concrete
+
+# ---- Road lamps: a glowing head on a post every 110 m, with a light (the nearest few are drawn) ----
+block min=6,39.5 max=7,40.5 top=5.2 base=4.8 color=3.2,2.6,1.6 material=emissive
+light pos=6.5,4.6,40 color=8,7,5 radius=30
+block min=6,-70.5 max=7,-69.5 top=5.2 base=4.8 color=3.2,2.6,1.6 material=emissive
+light pos=6.5,4.6,-70 color=8,7,5 radius=30
+block min=6,-180.5 max=7,-179.5 top=5.2 base=4.8 color=3.2,2.6,1.6 material=emissive
+light pos=6.5,4.6,-180 color=8,7,5 radius=30
+block min=6,-290.5 max=7,-289.5 top=5.2 base=4.8 color=3.2,2.6,1.6 material=emissive
+light pos=6.5,4.6,-290 color=8,7,5 radius=30
+block min=6,-400.5 max=7,-399.5 top=5.2 base=4.8 color=3.2,2.6,1.6 material=emissive
+light pos=6.5,4.6,-400 color=8,7,5 radius=30
+block min=6,-510.5 max=7,-509.5 top=5.2 base=4.8 color=3.2,2.6,1.6 material=emissive
+light pos=6.5,4.6,-510 color=8,7,5 radius=30
+block min=6,-620.5 max=7,-619.5 top=5.2 base=4.8 color=3.2,2.6,1.6 material=emissive
+light pos=6.5,4.6,-620 color=8,7,5 radius=30
+block min=6,-730.5 max=7,-729.5 top=5.2 base=4.8 color=3.2,2.6,1.6 material=emissive
+light pos=6.5,4.6,-730 color=8,7,5 radius=30
+block min=6,-840.5 max=7,-839.5 top=5.2 base=4.8 color=3.2,2.6,1.6 material=emissive
+light pos=6.5,4.6,-840 color=8,7,5 radius=30
+block min=6,-950.5 max=7,-949.5 top=5.2 base=4.8 color=3.2,2.6,1.6 material=emissive
+light pos=6.5,4.6,-950 color=8,7,5 radius=30
+block min=6,-1060.5 max=7,-1059.5 top=5.2 base=4.8 color=3.2,2.6,1.6 material=emissive
+light pos=6.5,4.6,-1060 color=8,7,5 radius=30
+block min=6,-1170.5 max=7,-1169.5 top=5.2 base=4.8 color=3.2,2.6,1.6 material=emissive
+light pos=6.5,4.6,-1170 color=8,7,5 radius=30
+
+# ---- Points of interest ---------------------------------------------------------------------------------
+# DOCKS: the pois file's sea faces -Z; turned 270 degrees it faces +X (east). Its landward edge is at x = 380.
+include path=levels/pois/docks.lvl offset=380,0,-300 yaw=270 prefix=dock door_offset=10 sector_offset=0
+
+# RELAY TOWER: gate facing south (+Z), towards the road.
+include path=levels/pois/relay_tower.lvl offset=-120,0,-1050 yaw=0 prefix=relay door_offset=20 sector_offset=1
+
+# Reserved sites for the remaining POIs (add a file under levels/pois/ and an include, with a
+# fresh door_offset and sector_offset each):
+#   fuel depot      offset=-300,0,-650   |   cannery   offset=250,0,-900
+#   radar station   offset=-250,0,-1150  |   old bunker offset=60,0,-500
+
+# ---- Patrols between the POIs (free-roaming: no sector, they never block an objective) ----------------------
+enemy pos=-8,0,-150 type=melee
+enemy pos=10,0,-230 type=ranged
+enemy pos=-14,0,-420 type=melee
+enemy pos=12,0,-520 type=ranged
+enemy pos=-6,0,-640 type=melee
+enemy pos=20,0,-760 type=ranged
+enemy pos=-18,0,-900 type=melee
+enemy pos=8,0,-960 type=ranged
+
+# ---- Pickups along the road -----------------------------------------------------------------------------------------
+pickup kind=pipe   pos=9,0.06,30 yaw=0.3
+pickup kind=bat    pos=-9,0.06,10 yaw=1.4
+pickup kind=barrel pos=12,0.45,-180
+pickup kind=barrel pos=-12,0.45,-480
+pickup kind=pipe   pos=14,0.06,-700 yaw=2.2
+pickup kind=bat    pos=-14,0.06,-870 yaw=0.8
+
+# ---- The beach: arrival, a prompt, a checkpoint, and the gate back to the hub -------------------------------------------
+block min=-3.8,92 max=-3,93 top=4.2 color=0.3,2.4,3 material=emissive
+block min=3,92 max=3.8,93 top=4.2 color=0.3,2.4,3 material=emissive
+block min=-3.8,92 max=3.8,93 top=4.8 base=4.2 color=0.3,2.4,3 material=emissive
+light pos=0,3.5,88 color=2,9,11 radius=14
+trigger when=enter min=-3,-1,85 max=3,4,91.5 do=portal level=kodiak_hub spawn=from_kodiak_island
+trigger when=enter min=-12,-1,40 max=12,4,75 do=checkpoint point=0,0,60
+trigger when=enter min=-12,-1,25 max=12,4,40 do=prompt time=10 text="KODIAK BASIN - FOLLOW THE ROAD NORTH. DOCKS ON THE EAST COAST, RELAY TOWER AT THE FAR END"
+trigger when=enter min=-12,-1,-420 max=12,4,-380 do=checkpoint point=0,0,-400
+trigger when=enter min=-12,-1,-740 max=12,4,-700 do=checkpoint point=0,0,-720
+trigger when=enter min=-20,-1,-315 max=-6,4,-285 do=prompt time=9 text="A SIDE ROAD LEADS EAST TO THE DOCKS"
+

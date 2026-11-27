@@ -19,7 +19,15 @@ namespace carnage::rec {
 struct Issue {
     int         line = 0;
     std::string message;
+    std::string file{};  // the file the problem is in, when it is not the one being loaded (e.g. an included POI)
 };
+
+// "file:line: message", using `topFile` for issues in the file being loaded itself.
+inline std::string describe(const Issue& i, std::string_view topFile) {
+    std::string out = i.file.empty() ? std::string(topFile) : i.file;
+    if (i.line > 0) out += ":" + std::to_string(i.line);
+    return out + ": " + i.message;
+}
 
 // Ids (levels, briefings) are lower-case letters, digits and '_' only, so an id
 // can never be a path.

@@ -1,23 +1,23 @@
 # Project Status Report: *Through the Eyes of Carnage*
 
 **Date:** 2026-11-27
-**Repo:** github.com/Hardrivetech/ThroughTheEyesOfCaranage (branch `main`, HEAD `e97f65b`, one commit ahead of `origin/main`)
+**Repo:** github.com/Hardrivetech/ThroughTheEyesOfCaranage (branch `main`; Phases 1-3 of the open-world plan are committed locally and not pushed)
 **Studio:** Hardrive Technologies / Driveby Studios
 **Genre:** High-octane first-person shooter in the *Hardcore Henry* style
 **Stack:** Custom C++23 engine, OpenGL 4.6, GLFW 3.4, GLM 1.0.1, GLAD2. Vendored stb_image and miniaudio. Catch2 v3.7.1 for tests. CMake with Ninja.
 
 ## Overall Stage
-**Vertical slice, pre-alpha (v0.1.0).** The engine, combat and level pipeline work end to end, and the game now has a flow: Level 01 (escape gauntlet) -> briefing -> Kodiak Island hub -> mission gates. Content is still thin (three levels) and nothing has been playtested by a person yet.
+**Vertical slice, pre-alpha (v0.1.0).** The engine, combat and level pipeline work end to end, and the game now has a flow: Level 01 (escape gauntlet) -> briefing -> Kodiak Island hub -> mission gates. The target is now a single contiguous Kodiak Island basin with modular points of interest. A 1 km x 1.4 km island skeleton with two POIs exists; content is still thin and nothing has been playtested by a person yet.
 
 ## Health Check (verified 2026-11-27)
 | Item | Result |
 |---|---|
-| Unit tests (Linux, Debug) | **Pass: 185 test cases** (`ctest` 100%), stable in random order, no expected failures |
+| Unit tests (Linux, Debug) | **226 test cases.** On a pristine copy of the commit: 100% pass in Debug and Release, stable in 3 random orders. In the shared working tree 1 case fails for a reason outside the code (see Known Issues #8) |
 | Compiler warnings | **0** in project code (game and tests, Debug and Release, GCC on Linux) |
-| Working tree | Clean. The last commit (`e97f65b`) is not pushed yet |
+| Working tree | Phase 3 files committed. Other people's in-progress files (briefing art, audio, scripts, `level01_outro.brf`, `.gitignore`) are untracked or modified and deliberately not committed |
 | Game launched or played | **No.** There was no display in the analysis environment, so rendering, audio, feel and the on-screen flow are unverified |
 | Linux release binary | `build/Carnage` in the repo directory is from Nov 22 and is stale; rebuild before playing |
-| Code size | About 11.2k lines in `src/` and 4.7k in `tests/`. Largest: `main.cpp` 1139, `Renderer.cpp` 840, `Level.cpp` 403, `Briefing.cpp` 346 |
+| Code size | About 12.1k lines in `src/` and 7.2k in `tests/`. Largest: `main.cpp` 1160, `Renderer.cpp` 824, `Level.cpp` 648 |
 | Open TODO/FIXME markers | None |
 
 ## Completed Features
@@ -37,8 +37,11 @@
 - **Level network checker** (`LevelGraph`): verifies every portal, `next_level`, arrival spawn and briefing resolves, and that every level has a way back. It runs at startup and its problems are logged.
 - **Broadphase:** `World` queries (rays, ground, ceiling, wall probes, collision) run through a uniform XZ grid, so they only examine nearby blocks. Results are bit-identical to the old full scan (checked against a verbatim copy of it, including tie-breaks), and doors need no grid updates. About 157x faster for rays and 387x for collision in a 3000-block, 2 km world.
 - **AI sleep/wake and light culling:** enemies far from the player don't run their brain (vision raycast, movement, ground and wall queries) and stand still until the player comes within the wake radius (50 m; they sleep beyond 65 m, so there is no flicker on the boundary). Damage, a nearby hurt ally, a gunshot, a punch or a blast wakes them (and keeps them awake for 10 s). Sleeping enemies still count for objectives and can be shot. Room lights are culled by distance in one pass, and sounds beyond audible range skip their occlusion raycasts. `EnemyConfig` balance numbers are untouched; the radii live in a separate `ActivationConfig`. The F4 overlay and the `stats` command show awake/asleep enemies, lights submitted and world-query load.
+- **Modular levels** (`include` record): a `.lvl` can include another (`include path=levels/pois/docks.lvl offset=120,0,-80 yaw=90 prefix=docks_`). Blocks, ramps, doors, lights, enemies, pickups, targets, triggers and named spawns are moved and rotated (quarter turns, integer-exact) into the parent. Cycles, depth beyond 8, fan-out beyond 256 and name collisions are reported as `file:line: message`, naming the included file. `LevelGraph` resolves spawns and portals in included files.
+- **Open-world environment:** a per-level `environment visibility= far= shadow=` record sets fog density, camera far plane and sun-shadow radius. Defaults reproduce the old values exactly. The shadow box snaps to texels (no shimmer), the depth range and bias scale with the radius, and shadows fade out over the outer 10% of the box. The loader warns if fog does not hide the far plane.
+- **Kodiak Island skeleton** (`kodiak_island.lvl`): 1 km x 1.4 km basin with flush roads, ridges, boulders, 21 lights, 17 enemies, and two included POIs (`pois/docks.lvl`, `pois/relay_tower.lvl`). Reached from Level 01 via `next_level=kodiak_island` (the briefing sits in between) and from the hub's third gate; it has a gate back to the hub.
 - **Dev tools:** backtick console (`god`, `infammo`, `noclip`, `freeze`, `stats`, `spawn`, `kill_all`, `tp x y z` / `tp <spawn>`, `open_door`/`close_door`, `level <id> [spawn]`, `briefing <id>`, `timescale`, `win`, and others), F3 dev menu, F4 profiler.
-- **Tests:** 142 cases across `World`, `Movement`, `Combat`/`Weapons`, levels, prompts, briefings and the hub. Each phase's tests were mutation-checked by injecting bugs and confirming the suite caught them.
+- **Tests:** 226 cases across `World`, `Movement`, `Combat`/`Weapons`, levels, prompts, briefings, the hub, broadphase, sleep/wake and includes. Each phase's tests were mutation-checked by injecting bugs and confirming the suite caught them.
 
 ## Work Done in This Roadmap
 | Commit | What |
@@ -49,7 +52,12 @@
 | `2f71356` | Tutorial prompts and level-completion transitions |
 | `f2b1946` | Fix: jumping under low ceilings shoved the player sideways |
 | `68bd54b` | Skippable lore briefings |
-| `e97f65b` | Kodiak hub, portals, named spawns, level network checker (not pushed) |
+| `e97f65b` | Kodiak hub, portals, named spawns, level network checker |
+| `63c6952` | Phase 1: broadphase grid for `World` queries |
+| `b1d2de7` | Phase 2: enemy sleep/wake and light culling |
+| Phase 3 commit | Modular `.lvl` includes, environment record, shadow/fog tuning, Kodiak Island skeleton and POIs |
+
+Phase 3 tests found two content bugs: a POI spawn 0.3 m above ground and roads raised 5 cm that put the default spawn inside a slab (roads are now flush).
 
 Bugs found and fixed along the way: the ceiling shove (above), `World::setDoorOpen(-1)` disabling every ordinary block, the player starting at the controller's default position instead of the level spawn, and enter-triggered doors announcing "SECTOR CLEARED".
 
@@ -61,6 +69,9 @@ Bugs found and fixed along the way: the ceiling shove (above), `World::setDoorOp
 5. **`main.cpp` is large** (1139 lines) and holds the whole game loop, level switching and the console commands. It works, but the level and briefing flow would be easier to test if it moved out.
 6. **Build needs the network.** CMake fetches dependencies through FetchContent, and GLAD generation needs Python with jinja2.
 7. **No progress persistence.** Completed missions are not remembered, so the hub has no locked or unlocked gates.
+8. **Briefing test fails in the shared working tree.** `level01_outro.brf` (another person's in-progress edit) lost its `briefing name=... title=...` header, so its name is `unnamed`. `test_briefing.cpp` "The shipped briefing loads cleanly and is wired to Level 01" reports 4 failed checks until the header is restored. The committed version passes.
+9. **Depth precision.** Near plane 0.05 and far plane 1500 on the island with a standard 32F depth buffer gives about 1 m depth resolution at 1 km, so coplanar faces can z-fight at distance. Fog hides most of it; reverse-Z is the fix. Float precision at 2 km is about 0.12 mm, so no origin shifting is needed.
+10. **Island look, scale and pacing unverified by eye.** No display was available.
 
 Resolved earlier: line-ending churn, tracked build artifacts, out-of-date README, missing test coverage, hard-coded level data, the ceiling bug, and the compiler warning in the test suite.
 
@@ -73,7 +84,7 @@ Resolved earlier: line-ending churn, tracked build artifacts, out-of-date README
 - CI, packaging and a release build pipeline.
 
 ## Recommended Next Steps (priority order)
-1. **Push `e97f65b`** and do a manual playtest: walk Level 01, finish it, read the briefing, explore the hub, use both gates and die in a few places. Log what feels wrong.
+1. **Push the local commits** and do a manual playtest: walk Level 01, finish it, read the briefing, explore the hub, use both gates and die in a few places. Log what feels wrong.
 2. **Tune balance** from that playtest (enemy damage and speed, throw damage, weapon feel). This is the first time the numbers can change.
 3. **Refine the hub and range** (layout, scale, lighting) and replace the placeholder briefing text and add images.
 4. **Content:** a second mission level, new enemy archetypes and a boss.
@@ -92,4 +103,4 @@ Resolved earlier: line-ending churn, tracked build artifacts, out-of-date README
 - Who writes the real briefing text and images?
 
 ---
-*Status was derived from the git history, the source, and test runs (Debug and Release builds, 142 test cases). It was not derived from a gameplay session.*
+*Status was derived from the git history, the source, and test runs (Debug and Release builds, 226 test cases). It was not derived from a gameplay session.*

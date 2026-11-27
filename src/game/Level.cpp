@@ -30,7 +30,7 @@ std::optional<Material> materialFor(std::string_view n) {
     return std::nullopt;
 }
 
-bool parseSpawn(Record& r, LevelData& level, bool& haveDefault) {
+bool parseSpawn(Record& r, LevelData& level, bool& haveDefault, bool allowDefault) {
     SpawnPoint p;
     p.pos = r.vec3("pos", p.pos, true);
     p.yaw = glm::radians(r.number("yaw", 0.0f));
@@ -43,6 +43,7 @@ bool parseSpawn(Record& r, LevelData& level, bool& haveDefault) {
     r.finish();
     if (r.failed()) return false;
     if (name.empty()) {
+        if (!allowDefault) return r.fail("an included file cannot set the default spawn; give it a name=");
         if (haveDefault) return r.fail("duplicate default spawn ignored");
         haveDefault   = true;
         level.spawn    = p.pos;
@@ -277,6 +278,244 @@ bool parseLevelRecord(Record& r, LevelData& level) {
     return true;
 }
 
+
+// ---- includes and the environment ------------------------------------------------------------
+
+constexpr int kMaxIncludeDepth = 8;     // files nested inside files
+constexpr int kMaxIncludes     = 256;   // include records expanded in one load (stops fan-out blow-ups)
+constexpr std::size_t kMaxIncludedBytes = 16u << 20;
+
+struct TriggerLoc {
+    std::string file;  // "" = the top-level file
+    int         line = 0;
+};
+
+// One file parsed on its own (with its own includes already merged in, in its coordinates).
+struct Piece {
+    LevelData               data;
+    std::vector<TriggerLoc> locs;  // where each trigger in data.triggers came from
+    bool                    haveSpawn = false;
+};
+
+struct ParseCtx {
+    const IncludeReader&     reader;
+    std::vector<rec::Issue>& issues;
+    std::vector<std::string> stack;  // normalised paths of the files being parsed, outermost first
+    int                      includeCount = 0;
+};
+
+bool parseEnvironment(Record& r, LevelData& level) {
+    Environment e;
+    if (const auto v = r.raw("visibility")) {
+        float m = 0.0f;
+        if (!rec::parseFloat(*v, m)) r.fail("'visibility' is not a number: '" + std::string(*v) + "'");
+        else if (m < Environment::kMinVisibility || m > Environment::kMaxVisibility)
+            r.fail("'visibility' must be between " + std::to_string(static_cast<int>(Environment::kMinVisibility)) + " and " +
+                   std::to_string(static_cast<int>(Environment::kMaxVisibility)) + " metres");
+        else e.haze = Environment::hazeForVisibility(m);
+    }
+    e.farPlane = r.number("far", e.farPlane);
+    if (!r.failed() && (e.farPlane < Environment::kMinFar || e.farPlane > Environment::kMaxFar))
+        r.fail("'far' must be between " + std::to_string(static_cast<int>(Environment::kMinFar)) + " and " +
+               std::to_string(static_cast<int>(Environment::kMaxFar)) + " metres");
+    e.shadowRadius = r.number("shadow", e.shadowRadius);
+    if (!r.failed() && (e.shadowRadius < Environment::kMinShadow || e.shadowRadius > Environment::kMaxShadow))
+        r.fail("'shadow' must be between " + std::to_string(static_cast<int>(Environment::kMinShadow)) + " and " +
+               std::to_string(static_cast<int>(Environment::kMaxShadow)) + " metres");
+    r.finish();
+    if (r.failed()) return false;
+    level.environment    = e;
+    level.hasEnvironment = true;
+    return true;
+}
+
+// Moves everything in `child` into `parent` through `place`. Ids and names are adjusted so that
+// two copies of the same piece (or two different pieces) do not collide silently.
+void mergePiece(Piece& parent, const Piece& child, const Placement& place, const std::string& prefix,
+                int doorOffset, int sectorOffset, const std::string& file, int includeLine, ParseCtx& ctx) {
+    LevelData&       p = parent.data;
+    const LevelData& c = child.data;
+    const auto problem = [&](std::string msg) { ctx.issues.push_back({includeLine, std::move(msg), ctx.stack.empty() ? std::string{} : ctx.stack.back()}); };
+
+    // Door ids are global: reusing one means opening either door opens both.
+    {
+        const std::vector<int> existing = p.world.doorIds();
+        for (const int id : c.world.doorIds()) {
+            const int shifted = id + doorOffset;
+            if (std::binary_search(existing.begin(), existing.end(), shifted))
+                problem("include '" + file + "': door id " + std::to_string(shifted) +
+                        " is already used; opening one would open both (give the include a door_offset)");
+        }
+    }
+
+    for (const Block& b : c.world.blocks()) {
+        Block nb = place.block(b);
+        if (nb.door >= 0) nb.door += doorOffset;
+        p.world.add(nb);
+    }
+    for (const WorldLight& l : c.world.lights()) {
+        WorldLight nl = l;
+        nl.pos = place.point(l.pos);
+        p.world.addLight(nl);
+    }
+    for (const TargetSpawn& t : c.targets) {
+        TargetSpawn nt = t;
+        nt.pos  = place.point(t.pos);
+        nt.axis = place.direction(t.axis);
+        p.targets.push_back(nt);
+    }
+    for (const EnemySpawn& e : c.enemies) {
+        EnemySpawn ne = e;
+        ne.pos = place.point(e.pos);
+        if (ne.sector >= 0) ne.sector += sectorOffset;
+        p.enemies.push_back(ne);
+    }
+    for (const PickupSpawn& k : c.pickups) {
+        PickupSpawn nk = k;
+        nk.pos = place.point(k.pos);
+        nk.yaw = k.yaw + place.yawRadians();
+        p.pickups.push_back(nk);
+    }
+    for (std::size_t i = 0; i < c.triggers.size(); ++i) {
+        const TriggerVolume& v = c.triggers[i];
+        TriggerVolume t = v;
+        if (v.condition == TriggerCondition::PlayerEnters) place.box(v.min, v.max, t.min, t.max);
+        else t.sector += sectorOffset;
+        if (v.action == TriggerAction::OpenDoor) t.param += doorOffset;
+        if (v.action == TriggerAction::Checkpoint) t.point = place.point(v.point);
+        p.triggers.push_back(t);
+        parent.locs.push_back(child.locs[i]);
+    }
+    for (const NamedSpawn& s : c.spawns) {
+        const std::string name = prefix.empty() ? s.name : prefix + "_" + s.name;
+        if (p.hasSpawn(name)) {
+            problem("include '" + file + "': spawn name '" + name + "' is already defined (give the include a prefix=)");
+            continue;
+        }
+        SpawnPoint sp = s.point;
+        sp.pos = place.point(s.point.pos);
+        sp.yaw = s.point.yaw + place.yawRadians();
+        p.spawns.push_back({name, sp});
+    }
+    for (const std::string& f : c.includedFiles)
+        if (std::find(p.includedFiles.begin(), p.includedFiles.end(), f) == p.includedFiles.end()) p.includedFiles.push_back(f);
+    if (std::find(p.includedFiles.begin(), p.includedFiles.end(), file) == p.includedFiles.end()) p.includedFiles.push_back(file);
+}
+
+Piece parsePiece(ParseCtx& ctx, std::string_view text, const std::string& file, bool top, int depth);
+
+bool parseInclude(Record& r, ParseCtx& ctx, Piece& piece, int depth, int lineNo) {
+    std::string pathText;
+    if (const auto p = r.raw("path")) pathText = std::string(*p);
+    else r.fail("missing 'path'");
+    const glm::vec3 offset = r.vec3("offset", glm::vec3(0.0f), false);
+
+    int turns = 0;
+    if (const auto y = r.raw("yaw")) {
+        float deg = 0.0f;
+        if (!rec::parseFloat(*y, deg)) r.fail("'yaw' is not a number: '" + std::string(*y) + "'");
+        else if (deg != std::floor(deg) || std::fmod(deg, 90.0f) != 0.0f)
+            r.fail("'yaw' must be a multiple of 90 degrees (blocks are axis-aligned): " + std::string(*y));
+        else turns = static_cast<int>(deg / 90.0f);
+    }
+    std::string prefix;
+    if (const auto pf = r.raw("prefix")) {
+        prefix = std::string(*pf);
+        if (!rec::validId(prefix)) r.fail("'prefix' must be an id (lower-case letters, digits, _): '" + prefix + "'");
+    }
+    const int doorOffset   = r.integer("door_offset", 0);
+    const int sectorOffset = r.integer("sector_offset", 0);
+    if (!r.failed() && (doorOffset < 0 || sectorOffset < 0)) r.fail("'door_offset' and 'sector_offset' must not be negative");
+    r.finish();
+    if (r.failed()) return false;
+
+    const auto norm = normalizeIncludePath(pathText);
+    if (!norm) return r.fail("'path' must be a plain relative path to a .lvl file under levels/: '" + pathText + "'");
+    if (depth + 1 > kMaxIncludeDepth) return r.fail("includes are nested more than " + std::to_string(kMaxIncludeDepth) + " levels deep");
+    if (++ctx.includeCount > kMaxIncludes) return r.fail("too many includes (the limit is " + std::to_string(kMaxIncludes) + " per level)");
+
+    if (const auto at = std::find(ctx.stack.begin(), ctx.stack.end(), *norm); at != ctx.stack.end()) {
+        std::string cycle;
+        for (auto it = at; it != ctx.stack.end(); ++it) cycle += *it + " -> ";
+        return r.fail("include cycle: " + cycle + *norm);
+    }
+    if (!ctx.reader) return r.fail("includes are not available here (no way to read '" + *norm + "')");
+    const std::optional<std::string> text = ctx.reader(*norm);
+    if (!text) return r.fail("cannot open included file '" + *norm + "'");
+
+    ctx.stack.push_back(*norm);
+    const Piece child = parsePiece(ctx, *text, *norm, false, depth + 1);
+    ctx.stack.pop_back();
+
+    Placement place;
+    place.offset = offset;
+    place.turns  = turns;
+    mergePiece(piece, child, place, prefix, doorOffset, sectorOffset, *norm, lineNo, ctx);
+    return true;
+}
+
+Piece parsePiece(ParseCtx& ctx, std::string_view text, const std::string& file, bool top, int depth) {
+    Piece piece;
+    LevelData& level = piece.data;
+    const auto issue = [&](int line, std::string msg) { ctx.issues.push_back({line, std::move(msg), file}); };
+
+    bool haveLevel = false;
+    rec::forEachRecordLine(text, [&](int lineNo, std::string_view kind, std::string_view rest) {
+        Record r;
+        if (!r.parse(rest)) { issue(lineNo, r.error()); return; }
+
+        // Records that describe the whole level are only read from the top-level file.
+        if (!top && (kind == "level" || kind == "environment")) {
+            issue(lineNo, std::string(kind) + ": only the top-level level file sets this; ignored in an included file");
+            return;
+        }
+
+        bool ok = false;
+        if (kind == "level") {
+            if (haveLevel) { issue(lineNo, "duplicate 'level' record ignored"); return; }
+            ok = parseLevelRecord(r, level);
+            haveLevel = haveLevel || ok;
+        } else if (kind == "environment") {
+            if (level.hasEnvironment) { issue(lineNo, "duplicate 'environment' record ignored"); return; }
+            ok = parseEnvironment(r, level);
+            if (ok && !level.environment.farPlaneIsHidden())
+                issue(lineNo, "environment: fog is only " + std::to_string(static_cast<int>(level.environment.fogAtFarPlane() * 100.0f)) +
+                              "% opaque at the far plane (" + std::to_string(static_cast<int>(level.environment.farPlane)) +
+                              " m), so the edge of the world will pop into view; make 'visibility' no larger than 'far'");
+        } else if (kind == "spawn") {
+            ok = parseSpawn(r, level, piece.haveSpawn, top);
+        } else if (kind == "include") {
+            ok = parseInclude(r, ctx, piece, depth, lineNo);
+        } else if (kind == "block")   ok = parseBlock(r, level);
+        else if (kind == "light")     ok = parseLight(r, level);
+        else if (kind == "target")    ok = parseTarget(r, level);
+        else if (kind == "enemy")     ok = parseEnemy(r, level);
+        else if (kind == "pickup")    ok = parsePickup(r, level);
+        else if (kind == "trigger") {
+            ok = parseTrigger(r, level);
+            if (ok) piece.locs.push_back({file, lineNo});
+        } else {
+            issue(lineNo, "unknown record type '" + std::string(kind) + "'");
+            return;
+        }
+        if (!ok) issue(lineNo, std::string(kind) + ": " + r.error());
+    });
+    return piece;
+}
+
+IncludeReader diskReader(std::string assetDir) {
+    return [assetDir = std::move(assetDir)](std::string_view path) -> std::optional<std::string> {
+        std::ifstream f(assetDir + "/" + std::string(path), std::ios::binary | std::ios::ate);
+        if (!f) return std::nullopt;
+        const auto size = f.tellg();
+        if (size < 0 || static_cast<std::size_t>(size) > kMaxIncludedBytes) return std::nullopt;
+        std::string text(static_cast<std::size_t>(size), '\0');
+        f.seekg(0);
+        f.read(text.data(), size);
+        return text;
+    };
+}
+
 } // namespace
 
 bool LevelData::hasSpawn(std::string_view name) const {
@@ -306,85 +545,91 @@ LevelTransition completionTransition(const LevelData& level) {
     return t;
 }
 
-LevelLoad parseLevel(std::string_view text) {
+std::optional<std::string> normalizeIncludePath(std::string_view path) {
+    constexpr std::string_view kAssets = "assets/";
+    if (path.starts_with(kAssets)) path.remove_prefix(kAssets.size());
+    if (path.empty() || path.size() > 128 || !path.starts_with("levels/") || !path.ends_with(".lvl")) return std::nullopt;
+    if (path.size() <= std::string_view("levels/.lvl").size()) return std::nullopt;  // no file name
+    if (!std::all_of(path.begin(), path.end(), [](char c) {
+            return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.' || c == '/';
+        }))
+        return std::nullopt;
+    // No empty, "." or ".." segments (so no way out of levels/).
+    std::size_t start = 0;
+    while (start <= path.size()) {
+        const std::size_t end = path.find('/', start);
+        const std::string_view seg = path.substr(start, end == std::string_view::npos ? end : end - start);
+        if (seg.empty() || seg == "." || seg == "..") return std::nullopt;
+        if (end == std::string_view::npos) break;
+        start = end + 1;
+    }
+    return std::string(path);
+}
+
+LevelLoad parseLevel(std::string_view text, const IncludeReader& includes, std::string_view selfPath) {
     LevelLoad out;
+    ParseCtx ctx{includes, out.issues, {}, 0};
+    if (!selfPath.empty()) ctx.stack.emplace_back(selfPath);
+
+    Piece piece = parsePiece(ctx, text, std::string{}, true, 0);
+    out.level = std::move(piece.data);
     LevelData& level = out.level;
-    const auto issue = [&](int line, std::string msg) { out.issues.push_back({line, std::move(msg)}); };
+    const auto issue = [&](const TriggerLoc& at, std::string msg) { out.issues.push_back({at.line, std::move(msg), at.file}); };
 
-    bool haveLevel = false, haveSpawn = false;
-    std::vector<int> triggerLines;  // source line of each accepted trigger
-
-    rec::forEachRecordLine(text, [&](int lineNo, std::string_view kind, std::string_view rest) {
-        Record r;
-        if (!r.parse(rest)) { issue(lineNo, r.error()); return; }
-
-        bool ok = false;
-        if (kind == "level") {
-            if (haveLevel) { issue(lineNo, "duplicate 'level' record ignored"); return; }
-            ok = parseLevelRecord(r, level);
-            haveLevel = haveLevel || ok;
-        } else if (kind == "spawn") {
-            ok = parseSpawn(r, level, haveSpawn);
-        } else if (kind == "block")   ok = parseBlock(r, level);
-        else if (kind == "light")     ok = parseLight(r, level);
-        else if (kind == "target")    ok = parseTarget(r, level);
-        else if (kind == "enemy")     ok = parseEnemy(r, level);
-        else if (kind == "pickup")    ok = parsePickup(r, level);
-        else if (kind == "trigger") {
-            ok = parseTrigger(r, level);
-            if (ok) triggerLines.push_back(lineNo);
-        } else {
-            issue(lineNo, "unknown record type '" + std::string(kind) + "'");
-            return;
-        }
-        if (!ok) issue(lineNo, std::string(kind) + ": " + r.error());
-    });
-
-    // Cross-checks. A trigger that can never work, or that fires the instant the
-    // level starts, is dropped rather than left to misbehave in game.
+    // Cross-checks, on the merged level. A trigger that can never work, or that fires the
+    // instant the level starts, is dropped rather than left to misbehave in game.
     std::vector<TriggerVolume> kept;
     for (std::size_t i = 0; i < level.triggers.size(); ++i) {
         const TriggerVolume& t = level.triggers[i];
-        const int line = triggerLines[i];
+        const TriggerLoc& at = piece.locs[i];
         bool drop = false;
-        if (t.action == TriggerAction::OpenDoor) {
-            const auto blocks = level.world.blocks();
-            if (std::none_of(blocks.begin(), blocks.end(), [&](const Block& b) { return b.door == t.param; })) {
-                issue(line, "trigger: no block has door=" + std::to_string(t.param));
-                drop = true;
-            }
+        if (t.action == TriggerAction::OpenDoor && !level.world.hasDoor(t.param)) {
+            issue(at, "trigger: no block has door=" + std::to_string(t.param));
+            drop = true;
         }
         if (!drop && t.condition == TriggerCondition::SectorCleared &&
             std::none_of(level.enemies.begin(), level.enemies.end(),
                          [&](const EnemySpawn& e) { return e.sector == t.sector; })) {
-            issue(line, "trigger: no enemy belongs to sector " + std::to_string(t.sector) +
-                        " (it would fire immediately)");
+            issue(at, "trigger: no enemy belongs to sector " + std::to_string(t.sector) + " (it would fire immediately)");
             drop = true;
         }
         if (!drop) kept.push_back(t);
     }
     level.triggers = std::move(kept);
 
-    if (!haveSpawn) issue(0, "no 'spawn' record; using the default spawn point");
-    if (level.world.blocks().empty()) issue(0, "level has no 'block' records");
+    if (!piece.haveSpawn) out.issues.push_back({0, "no 'spawn' record; using the default spawn point", {}});
+    if (level.world.blocks().empty()) out.issues.push_back({0, "level has no 'block' records", {}});
     return out;
 }
 
-LevelLoad loadLevelFile(const std::string& path) {
+LevelLoad loadLevelFile(const std::string& path, std::string_view assetDir) {
     std::ifstream f(path, std::ios::binary);
     if (!f) {
         LevelLoad out;
         out.opened = false;
-        out.issues.push_back({0, "cannot open level file '" + path + "'"});
+        out.issues.push_back({0, "cannot open level file '" + path + "'", {}});
         return out;
     }
     std::ostringstream ss;
     ss << f.rdbuf();
-    return parseLevel(ss.str());
+
+    std::string self;  // this file's own path relative to the assets directory, for cycle checks
+    if (const std::size_t at = path.rfind("/levels/"); at != std::string::npos)
+        if (const auto norm = normalizeIncludePath(std::string_view(path).substr(at + 1))) self = *norm;
+    return parseLevel(ss.str(), diskReader(std::string(assetDir)), self);
+}
+
+LevelLoad loadLevelFile(const std::string& path) {
+    std::string assets = ".";
+    if (const std::size_t at = path.rfind("/levels/"); at != std::string::npos) assets = path.substr(0, at);
+    return loadLevelFile(path, assets);
 }
 
 void spawnTargets(const LevelData& level, Combat& combat) {
-    for (const TargetSpawn& t : level.targets) combat.addTarget(Target::dummy(t.pos, t.patrol));
+    for (const TargetSpawn& t : level.targets) {
+        const std::size_t i = combat.addTarget(Target::dummy(t.pos, t.patrol));
+        if (Target* target = combat.targetAt(i)) target->patrolAxis = t.axis;
+    }
 }
 
 void spawnEnemies(const LevelData& level, Enemies& enemies, Combat& combat) {

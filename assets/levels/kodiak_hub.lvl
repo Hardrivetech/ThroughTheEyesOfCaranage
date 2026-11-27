@@ -10,12 +10,14 @@
 # Spawns (the places other levels send the player to):
 #   default / from_level01_escape   the landing pad, facing north
 #   from_kodiak_range               the east yard, facing west (away from the gate you came out of)
+#   from_kodiak_island              the plaza's west side, facing east (away from the island gate)
 # Format reference: src/game/Level.hpp. Yaw is in degrees: 0 faces -Z (north), 90 faces -X.
 
 level name=kodiak_hub
 spawn pos=0,0.2,40 yaw=0
 spawn name=from_level01_escape pos=0,0.2,40 yaw=0
 spawn name=from_kodiak_range pos=24,0,-8.5 yaw=90
+spawn name=from_kodiak_island pos=-23,0,25 yaw=-90
 
 # ---- Ground and the island's outer cliffs -------------------------------------------------
 block min=-30,-61 max=31,51 top=0 color=0.36,0.38,0.35 material=concrete
@@ -28,6 +30,11 @@ block min=-30,-61 max=30,-60 top=7 color=0.18,0.22,0.26 material=painted_metal
 block min=-8,28 max=8,46 top=0.2 color=0.25,0.25,0.28 material=steel
 block min=-14,30 max=-11,33 top=1.1 color=0.55,0.24,0.12 material=painted_metal
 block min=11,36 max=14,39 top=1.4 color=0.55,0.24,0.12 material=painted_metal
+
+# ---- Plaza west gate: to the open Kodiak Basin (the decorative frame; the portal trigger is below) ---
+block min=-30,21.4 max=-29,22 top=4.2 color=0.3,2.4,3 material=emissive
+block min=-30,28 max=-29,28.6 top=4.2 color=0.3,2.4,3 material=emissive
+block min=-30,21.4 max=-29,28.6 top=4.8 base=4.2 color=0.3,2.4,3 material=emissive
 
 # ---- Plaza (middle): cover, a vault hurdle, and a ramp up to a platform ---------------------
 block min=-4,-6 max=-1.5,-3.5 top=1.1 color=0.55,0.24,0.12 material=painted_metal
@@ -89,6 +96,7 @@ trigger when=enter min=18,-1,-12 max=22,4,-2 do=open_door door=1
 # ---- Mission gates (portals) ---------------------------------------------------------------------
 trigger when=enter min=-2.5,-1,-57.5 max=2.5,4,-55 do=portal level=level01_escape
 trigger when=enter min=27,-1,-16.9 max=29.9,4,-13.1 do=portal level=kodiak_range
+trigger when=enter min=-29.5,-1,22.2 max=-27.5,4,27.8 do=portal level=kodiak_island spawn=from_kodiak_hub
 
 # ---- Checkpoints: one per zone ---------------------------------------------------------------------
 trigger when=enter min=-9,-1,27 max=9,3,47 do=checkpoint point=0,0.2,40
@@ -100,4 +108,5 @@ trigger when=enter min=18,-1,-28 max=29,3,-2 do=checkpoint point=22,0,-8.5
 trigger when=enter min=-9,-1,36 max=9,4,47 do=prompt time=7 text="KODIAK ISLAND - STAGING AREA. HEAD NORTH."
 trigger when=enter min=-12,-1,12 max=12,4,26 do=prompt time=8 text="THE COMMAND POST (NORTH) AND THE EAST YARD LEAD TO MISSIONS"
 trigger when=enter min=-6,-1,-52 max=6,4,-44 do=prompt time=9 text="WALK INTO THE GATE TO REPLAY LEVEL 01 - ESCAPE"
+trigger when=enter min=-26,-1,18 max=-18,4,32 do=prompt time=9 text="THE WEST GATE LEADS TO KODIAK BASIN - THE OPEN ISLAND"
 trigger when=enter min=20,-1,-17 max=26,4,-13 do=prompt time=9 text="WALK INTO THE GATE FOR THE PROVING GROUND (PRACTICE RANGE)"

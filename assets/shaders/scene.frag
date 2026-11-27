@@ -19,6 +19,7 @@ uniform float uHaze;       // distance haze density, 0 disables
 uniform mat4            uLightViewProj;
 uniform sampler2DShadow uShadowMap;
 uniform float           uShadowTexel;  // world metres per shadow texel
+uniform float           uShadowBias;   // depth bias in shadow-map depth units (scales with the sun box)
 
 uniform int  uLightCount;
 uniform vec4 uLightPosR[MAX_LIGHTS];   // xyz position, w radius
@@ -176,8 +177,13 @@ float sunShadow(vec3 pos, vec3 n) {
     float lit = 0.0;
     for (int y = -1; y <= 1; ++y)
         for (int x = -1; x <= 1; ++x)
-            lit += texture(uShadowMap, vec3(sc.xy + vec2(x, y) * texel, sc.z - 0.0006));
-    return lit / 9.0;
+            lit += texture(uShadowMap, vec3(sc.xy + vec2(x, y) * texel, sc.z - uShadowBias));
+    lit /= 9.0;
+
+    // Fade shadows out over the outer 10% of the box instead of cutting them off, so the
+    // edge of the shadowed area does not show as a hard line on a big open map.
+    float edge = max(abs(sc.x * 2.0 - 1.0), abs(sc.y * 2.0 - 1.0));
+    return mix(lit, 1.0, smoothstep(0.9, 1.0, edge));
 }
 
 vec3 shade(Surface s, vec3 pos, vec3 V) {

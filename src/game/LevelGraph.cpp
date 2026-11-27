@@ -57,7 +57,8 @@ LevelGraphReport checkLevelGraph(std::string_view assetDir, std::string_view sta
         }
         node.loaded = true;
         for (const LevelIssue& i : load.issues)
-            problem("level '" + id + "', line " + std::to_string(i.line) + ": " + i.message);
+            problem("level '" + id + "'" + (i.file.empty() ? std::string{} : ", file '" + i.file + "'") +
+                    ", line " + std::to_string(i.line) + ": " + i.message);
         if (load.level.name != id)
             problem("level file '" + id + ".lvl' declares name '" + load.level.name + "' (they must match)");
 

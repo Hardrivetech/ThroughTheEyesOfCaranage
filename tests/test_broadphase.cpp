@@ -597,21 +597,22 @@ TEST_CASE("A World that was copied or moved after its grid was built still answe
 }
 
 TEST_CASE("The shipped levels give identical answers with the broadphase", "[broadphase][shipped]") {
-    for (const char* id : {"level01_escape", "kodiak_hub", "kodiak_range"}) {
+    for (const char* id : {"level01_escape", "kodiak_hub", "kodiak_range", "kodiak_island"}) {
         INFO("level " << id);
         LevelLoad load = loadLevelFile(levelPath(CARNAGE_ASSET_DIR, id));
         REQUIRE(load.clean());
         World& w = load.level.world;
         Lcg r(static_cast<std::uint32_t>(std::string(id).size()) * 31u);
-        compareRays(w, r, 4000, 60.0f);
-        comparePoints(w, r, 3000, 60.0f);
-        compareResolve(w, r, 3000, 60.0f);
+        const float extent = std::string(id) == "kodiak_island" ? 700.0f : 60.0f;   // the island is ~1 km across
+        compareRays(w, r, 4000, extent);
+        comparePoints(w, r, 3000, extent);
+        compareResolve(w, r, 3000, extent);
 
         // ...with every door closed and every door open.
         for (const bool open : {false, true}) {
             for (const int door : w.doorIds()) w.setDoorOpen(door, open);
-            compareRays(w, r, 1500, 60.0f);
-            compareResolve(w, r, 1500, 60.0f);
+            compareRays(w, r, 1500, extent);
+            compareResolve(w, r, 1500, extent);
         }
     }
 }

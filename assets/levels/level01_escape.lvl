@@ -10,9 +10,11 @@
 #   base=<h> is the underside (default -0.2), door=<id> makes a closable door.
 # Materials: concrete tile painted_metal steel brass flesh plastic emissive skin cloth leather
 
-level name=level01_escape briefing=level01_outro next_level=kodiak_hub next_spawn=from_level01_escape
+level name=level01_escape briefing=level01_outro next_level=kodiak_island next_spawn=from_level01_escape
 # On completion the game plays the briefing assets/briefings/level01_outro.brf (ESC skips it),
-# then loads the Kodiak Island hub, arriving at its landing pad.
+# then loads the open Kodiak Island basin (kodiak_island.lvl), arriving on its beach.
+# The staging hub (kodiak_hub) and the practice range stay reachable through the island's gate and
+# the console (`level kodiak_hub`).
 # Remove next_level=... to return to the main menu instead; remove briefing=... to skip the briefing.
 spawn pos=0,0,10
 

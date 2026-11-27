@@ -391,12 +391,12 @@ TEST_CASE("The shipped levels form one consistent, fully connected network", "[h
     for (const std::string& p : r.problems) FAIL(p);
     CHECK(r.ok());
     CHECK(std::set<std::string>(r.levels.begin(), r.levels.end()) ==
-          std::set<std::string>{"level01_escape", "kodiak_hub", "kodiak_range"});
+          std::set<std::string>{"level01_escape", "kodiak_island", "kodiak_hub", "kodiak_range"});
 
     // The same network seen from the hub (every level can reach every other one).
     const LevelGraphReport fromHub = checkLevelGraph(kAssets, "kodiak_hub");
     CHECK(fromHub.ok());
-    CHECK(fromHub.levels.size() == 3);
+    CHECK(fromHub.levels.size() == 4);
 }
 
 TEST_CASE("The routes between the shipped levels land on real spawn points", "[hub][graph][routing]") {
@@ -407,24 +407,37 @@ TEST_CASE("The routes between the shipped levels land on real spawn points", "[h
     REQUIRE(hub.clean());
     REQUIRE(range.clean());
 
-    // Level 01 -> (briefing) -> hub landing pad.
+    // Level 01 -> (briefing) -> the open island's beach.
+    const LevelLoad island = loadLevelFile(levelPath(kAssets, "kodiak_island"));
+    REQUIRE(island.clean());
     const LevelTransition done = completionTransition(l01.level);
     CHECK(done.briefing == "level01_outro");
     CHECK(done.type == TransitionType::Level);
-    CHECK(done.next == "kodiak_hub");
-    REQUIRE(hub.level.hasSpawn(done.spawn));
+    CHECK(done.next == "kodiak_island");
+    REQUIRE(island.level.hasSpawn(done.spawn));
     CHECK(done.spawn == "from_level01_escape");
-    const SpawnPoint landing = hub.level.spawnPoint(done.spawn);
+    CHECK(near(island.level.spawnPoint(done.spawn).pos, {0.0f, 0.0f, 60.0f}));
+
+    // The hub's landing pad (reached by the island's gate, or `level kodiak_hub`).
+    const SpawnPoint landing = hub.level.spawnPoint("from_level01_escape");
     CHECK(near(landing.pos, {0.0f, 0.2f, 40.0f}));
     CHECK(landing.yaw == Approx(0.0f));
 
-    // Hub portals: two selectable missions.
+    // Hub portals: three selectable destinations.
     std::set<std::string> missions;
     for (const LevelLink& l : levelLinks(hub.level)) {
         CHECK(l.kind == LevelLink::Kind::Portal);
         missions.insert(l.to);
     }
-    CHECK(missions == std::set<std::string>{"level01_escape", "kodiak_range"});
+    CHECK(missions == std::set<std::string>{"level01_escape", "kodiak_range", "kodiak_island"});
+
+    // Island <-> hub: each lands on a spawn the other really has.
+    bool islandToHub = false;
+    for (const LevelLink& l : levelLinks(island.level))
+        if (l.to == "kodiak_hub") { islandToHub = true; CHECK(hub.level.hasSpawn(l.spawn)); }
+    CHECK(islandToHub);
+    for (const LevelLink& l : levelLinks(hub.level))
+        if (l.to == "kodiak_island") CHECK(island.level.hasSpawn(l.spawn));
 
     // Range -> hub: arrives in the east yard, not on the landing pad.
     const auto back = levelLinks(range.level);
@@ -445,7 +458,7 @@ TEST_CASE("The hub has the zones, doors, gates and checkpoints it promises", "[h
     CHECK(L.name == "kodiak_hub");
     CHECK(L.world.doorIds() == std::vector<int>{0, 1});
     CHECK(L.enemies.empty());     // a safe staging area
-    CHECK(L.spawns.size() == 2);
+    CHECK(L.spawns.size() == 3);
 
     int portals = 0, checkpoints = 0, prompts = 0, opens = 0;
     for (const TriggerVolume& t : L.triggers) {
@@ -454,9 +467,9 @@ TEST_CASE("The hub has the zones, doors, gates and checkpoints it promises", "[h
         prompts     += t.action == TriggerAction::Prompt;
         opens       += t.action == TriggerAction::OpenDoor;
     }
-    CHECK(portals == 2);
+    CHECK(portals == 3);       // Level 01, the practice range, the open island
     CHECK(checkpoints == 4);   // landing pad, plaza, command post, east yard
-    CHECK(prompts == 4);
+    CHECK(prompts == 5);
     CHECK(opens == 4);         // each door opens from both sides
 
     // Every door has an `enter` trigger that opens it.
@@ -470,7 +483,7 @@ TEST_CASE("The hub has the zones, doors, gates and checkpoints it promises", "[h
 }
 
 TEST_CASE("Spawn points, gates and checkpoints in the shipped levels are on solid ground", "[hub][shipped]") {
-    for (const char* id : {"level01_escape", "kodiak_hub", "kodiak_range"}) {
+    for (const char* id : {"level01_escape", "kodiak_hub", "kodiak_range", "kodiak_island"}) {
         INFO("level " << id);
         const LevelLoad r = loadLevelFile(levelPath(kAssets, id));
         REQUIRE(r.clean());

@@ -92,7 +92,7 @@ int main() {
 
     const std::string firstPath = levelPath(CARNAGE_ASSET_DIR, kFirstLevel);
     LevelLoad loaded = loadLevelFile(firstPath);
-    for (const LevelIssue& i : loaded.issues) log::warn("{}:{}: {}", firstPath, i.line, i.message);
+    for (const LevelIssue& i : loaded.issues) log::warn("{}", rec::describe(i, firstPath));
     if (!loaded.opened) return EXIT_FAILURE;
     // Check the whole level network once (portals, next_level, briefings, spawn names) so a
     // broken link is reported at startup rather than when a player walks into a gate.
@@ -222,7 +222,7 @@ int main() {
     const auto switchLevel = [&](const std::string& id, const std::string& spawnName = {}) -> bool {
         const std::string path = levelPath(CARNAGE_ASSET_DIR, id);
         LevelLoad next = loadLevelFile(path);
-        for (const LevelIssue& i : next.issues) log::warn("{}:{}: {}", path, i.line, i.message);
+        for (const LevelIssue& i : next.issues) log::warn("{}", rec::describe(i, path));
         if (!next.opened) return false;
         loaded = std::move(next);
         currentLevelId = id;
@@ -994,6 +994,7 @@ int main() {
             const Weapon& weapon = *weapons[current];
             const Weapon* left   = (offhand && !interact.holding()) ? offhand.get() : nullptr;
             camera.fovDegrees = fovPrev + (fovCur - fovPrev) * a;
+            camera.farPlane   = sanitized(level.environment).farPlane;
             ShakeOffset shakeOff = trauma.sample(a);
             const ShakeOffset fo = feel.sample(a);
             shakeOff.translation += fo.translation;
@@ -1012,6 +1013,7 @@ int main() {
             sp.viewmodelProjection = glm::perspective(glm::radians(65.0f), renderer::aspect(),
                                                       0.01f, 10.0f);
             sp.time  = std::chrono::duration<float>(Clock::now() - startTime).count();
+            sp.env   = level.environment;
             sp.shake = trauma.shake() * menu.settings().shake;
             sp.flash = blind.sample(a);
 

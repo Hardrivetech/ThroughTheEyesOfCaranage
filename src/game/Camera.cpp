@@ -45,7 +45,7 @@ glm::mat4 Camera::view(const glm::vec3& eye, const ShakeOffset& shake, float rol
 }
 
 glm::mat4 Camera::projection(float aspect) const {
-    return glm::perspective(glm::radians(fovDegrees), aspect, 0.05f, 300.0f);
+    return glm::perspective(glm::radians(fovDegrees), aspect, 0.05f, farPlane);
 }
 
 } // namespace carnage
