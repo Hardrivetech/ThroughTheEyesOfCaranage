@@ -96,6 +96,7 @@ if(CARNAGE_BUILD_TESTS)
         tests/test_movement.cpp
         tests/test_combat.cpp
         tests/test_level.cpp
+        tests/test_prompts.cpp
         src/game/World.cpp
         src/game/Movement.cpp
         src/game/Combat.cpp

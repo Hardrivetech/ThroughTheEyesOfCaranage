@@ -69,7 +69,7 @@ constexpr std::array<Subsystem, 5> kSubsystems{{
 
 namespace {
 
-constexpr const char* kLevelPath = CARNAGE_ASSET_DIR "/levels/level01_escape.lvl";
+constexpr const char* kFirstLevel = "level01_escape";
 
 audio::Sfx fireSound(const char* name) {
     const std::string_view n{name};
@@ -86,23 +86,28 @@ int main() {
     SubsystemManager subsystems{kSubsystems};
     if (!subsystems.initAll()) return EXIT_FAILURE;
 
-    LevelLoad loaded = loadLevelFile(kLevelPath);
-    for (const LevelIssue& i : loaded.issues) log::warn("{}:{}: {}", kLevelPath, i.line, i.message);
+    const std::string firstPath = levelPath(CARNAGE_ASSET_DIR, kFirstLevel);
+    LevelLoad loaded = loadLevelFile(firstPath);
+    for (const LevelIssue& i : loaded.issues) log::warn("{}:{}: {}", firstPath, i.line, i.message);
     if (!loaded.opened) return EXIT_FAILURE;
+    // `loaded` is reassigned in place on a level switch, so these references stay valid.
     const LevelData& level = loaded.level;
     World& world = loaded.level.world;  // mutable: doors open at runtime
     if (!renderer::uploadWorld(world)) return EXIT_FAILURE;
 
     // Props: render-only meshes sitting on the collision-only pillar blocks.
-    if (const int pillar = renderer::loadMesh("meshes/pillar.obj"); pillar >= 0) {
+    const auto buildProps = [&] {
+        renderer::clearProps();
+        const int pillar = renderer::loadMesh("meshes/pillar.obj");
+        if (pillar < 0) return;
         for (const Block& b : world.blocks()) {
             if (b.visible || b.door >= 0) continue;
             const glm::vec3 c{(b.min.x + b.max.x) * 0.5f, 0.0f, (b.min.y + b.max.y) * 0.5f};
             renderer::addProp(pillar, glm::translate(glm::mat4(1.0f), c),
                               glm::vec3(0.5f), Material::Concrete);
         }
-    }
-
+    };
+    buildProps();
 
     using Clock = std::chrono::steady_clock;
     Clock::time_point lastReport = Clock::now();
@@ -143,6 +148,7 @@ int main() {
     PlayerHealth  health;
     TriggerSystem triggers;
     installTriggers(level, triggers);
+    PromptSystem  prompts;  // tutorial hints shown by `prompt` triggers
     glm::vec3   checkpoint = level.spawn;
     bool        deathHandled = false;
     bool        levelComplete = false;
@@ -164,7 +170,8 @@ int main() {
     // spawn* helpers with startup so the two paths cannot diverge.
     const auto resetGame = [&] {
         world.resetDoors();
-        triggers.reset();
+        installTriggers(level, triggers);  // also re-arms every trigger
+        prompts.clear();
         health.reset();
         checkpoint = level.spawn;
         deathHandled = levelComplete = false;
@@ -190,6 +197,23 @@ int main() {
         weapons[current]->equip();
         offhand.reset();
         fovPrev = fovCur = menu.settings().fov;
+    };
+
+    // Replaces the running level with `id` (assets/levels/<id>.lvl) and starts it
+    // fresh. Returns false, leaving the current level untouched, if it cannot be read.
+    const auto switchLevel = [&](const std::string& id) -> bool {
+        const std::string path = levelPath(CARNAGE_ASSET_DIR, id);
+        LevelLoad next = loadLevelFile(path);
+        for (const LevelIssue& i : next.issues) log::warn("{}:{}: {}", path, i.line, i.message);
+        if (!next.opened) return false;
+        loaded = std::move(next);
+        if (!renderer::uploadWorld(world)) {
+            log::error("could not upload level '{}'", id);
+            renderer::requestClose();
+        }
+        buildProps();
+        resetGame();
+        return true;
     };
 
     // World sound with occlusion: geometry between the ear and the source
@@ -459,6 +483,7 @@ int main() {
             dmgFlash = std::max(0.0f, dmgFlash - fdt * 1.6f);
             objectiveMsgTime = std::max(0.0f, objectiveMsgTime - fdt);
             const bool alive = !health.dead;
+            PromptEvents promptEvents;  // what the player did this tick, for prompts waiting on it
 
             if (health.dead && !deathHandled && health.readyToRespawn()) {
                 // Fast checkpoint reload: keeps rooms, doors and cleared sectors,
@@ -544,7 +569,7 @@ int main() {
                 a.muzzle = aim.origin + q * muzzleLocal(w.stats(), hand);
                 const WeaponEvents e = w.tick(fdt, t, a, combat, gameplayRng);
                 const float pitchJitter = 0.94f + 0.12f * gameplayRng.uniform();
-                if (e.fired)  audio::play(fireSound(w.stats().name), 1.0f, side * 0.35f, pitchJitter);
+                if (e.fired)  { audio::play(fireSound(w.stats().name), 1.0f, side * 0.35f, pitchJitter); promptEvents.fire = true; }
                 if (e.dryFired)       audio::play(audio::Sfx::DryFire, 0.7f, side * 0.3f);
                 if (e.reloadStarted)  audio::play(audio::Sfx::Reload, 0.8f, side * 0.3f);
                 if (e.reloadFinished) audio::play(audio::Sfx::ReloadDone, 0.8f, side * 0.3f);
@@ -577,6 +602,7 @@ int main() {
                     enemies.throwHeld(aim.forward * 17.0f + glm::vec3(0.0f, 5.0f, 0.0f) +
                                       player.velocity() * 0.5f);
                     audio::play(audio::Sfx::Throw, 1.0f, 0.0f, 0.7f);
+                    promptEvents.thrown = true;
                     trauma.add(0.35f);
                     feel.onFire(1.2f, -1.0f);
                     grabPress = false;
@@ -584,6 +610,7 @@ int main() {
                     const int idx = enemies.findStaggered(aim.origin, aim.forward);
                     if (idx >= 0) {
                         enemies.grab(idx);
+                        promptEvents.grab = true;
                         audio::play(audio::Sfx::Pickup, 0.9f, 0.0f, 0.7f);
                         trauma.add(0.15f);
                         grabPress = false;
@@ -605,8 +632,8 @@ int main() {
                 ic.right     = aim.right;
                 ic.playerVel = player.velocity();
                 const InteractEvents ie = interact.tick(fdt, ii, ic, combat, world);
-                if (ie.grabbed) audio::play(audio::Sfx::Pickup, 0.8f);
-                if (ie.thrown)  audio::play(audio::Sfx::Throw, 0.9f);
+                if (ie.grabbed) { audio::play(audio::Sfx::Pickup, 0.8f); promptEvents.grab = true; }
+                if (ie.thrown)  { audio::play(audio::Sfx::Throw, 0.9f);  promptEvents.thrown = true; }
                 if (ie.swung)   audio::play(audio::Sfx::Swing, 0.9f, 0.2f);
                 if (ie.hit)     audio::play(audio::Sfx::Impact, 0.5f + 0.5f * ie.impact);
                 if (const float ti = enemies.takeImpact(); ti > 0.0f) {
@@ -709,12 +736,25 @@ int main() {
                         levelComplete = true;
                         say("LEVEL COMPLETE");
                         break;
+                    case TriggerAction::Prompt:
+                        prompts.show(expandPromptText(te.text, km), te.time, te.clearOn);
+                        break;
                 }
             }
             if (levelComplete) {
                 completeTimer += fdt;
-                // Fade out, then unload the level and return to the main menu.
+                // Fade out, then go where the level says: straight into the next
+                // level, or (the default, or if that fails) back to the main menu.
                 if (completeTimer >= kCompleteFadeEnd) {
+                    const LevelTransition next = completionTransition(level);
+                    if (next.type == TransitionType::Level) {
+                        if (switchLevel(next.next)) {
+                            input::endTick();
+                            ++ticks;
+                            return;
+                        }
+                        log::error("cannot load next level '{}'; returning to the menu", next.next);
+                    }
                     menu.showMain();
                     input::setCursorCaptured(false);
                     resetGame();
@@ -728,6 +768,11 @@ int main() {
 
             // Movement feeds the camera feedback system.
             const MoveEvents& ev = player.events();
+            promptEvents.jump    = ev.jumped || ev.wallJumped;
+            promptEvents.slide   = ev.slideStarted;
+            promptEvents.vault   = ev.vaultStarted;
+            promptEvents.wallRun = ev.wallRunStarted;
+            prompts.update(fdt, promptEvents);
             if (ev.landImpact > 3.0f)
                 audio::play(audio::Sfx::Land, std::clamp(ev.landImpact / 14.0f, 0.3f, 1.2f));
             if (ev.jumped || ev.wallJumped) audio::play(audio::Sfx::Jump, 0.6f);
@@ -863,6 +908,8 @@ int main() {
                           enemies.findStaggered(player.eyePosition(1.0f),
                                                 camera.orientation({0.0f, 0.0f}) * glm::vec3(0.0f, 0.0f, -1.0f)) >= 0))
                     Hud::prompt(keyName(menu.settings().keys.key(Action::Grab)), "GRAB", renderer::aspect(), overlay);
+                if (!health.dead && !levelComplete && prompts.active())
+                    Hud::tutorial(prompts.text(), prompts.alpha(), renderer::aspect(), overlay);
                 if (!health.dead) {
                     if (levelComplete) {
                         Hud::objective("LEVEL COMPLETE", renderer::aspect(), overlay);

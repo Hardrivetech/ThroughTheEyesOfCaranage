@@ -63,21 +63,39 @@ bool parseInt(std::string_view s, int& out) {
 class Record {
 public:
     // Returns false (and sets the error) if a token is not key=value or repeats a key.
+    // A value may be double-quoted to contain spaces: text="HELLO THERE".
     bool parse(std::string_view rest) {
-        for (std::size_t i = 0; i < rest.size();) {
-            const std::size_t a = rest.find_first_not_of(" \t", i);
+        constexpr std::string_view ws = " \t";
+        std::size_t i = 0;
+        while (i < rest.size()) {
+            const std::size_t a = rest.find_first_not_of(ws, i);
             if (a == std::string_view::npos) break;
-            std::size_t b = rest.find_first_of(" \t", a);
-            if (b == std::string_view::npos) b = rest.size();
-            const std::string_view tok = rest.substr(a, b - a);
-            i = b;
-            const std::size_t eq = tok.find('=');
-            if (eq == std::string_view::npos || eq == 0 || eq + 1 == tok.size())
+            std::size_t tokEnd = rest.find_first_of(ws, a);
+            if (tokEnd == std::string_view::npos) tokEnd = rest.size();
+            const std::string_view tok = rest.substr(a, tokEnd - a);
+
+            const std::size_t eq = rest.find('=', a);
+            if (eq == std::string_view::npos || eq >= tokEnd || eq == a)
                 return fail("expected key=value, got '" + std::string(tok) + "'");
-            const std::string_view key = tok.substr(0, eq);
+            const std::string_view key = rest.substr(a, eq - a);
+
+            std::string_view value;
+            if (eq + 1 < rest.size() && rest[eq + 1] == '"') {
+                const std::size_t close = rest.find('"', eq + 2);
+                if (close == std::string_view::npos)
+                    return fail("unterminated quote in '" + std::string(key) + "'");
+                value = rest.substr(eq + 2, close - eq - 2);
+                i = close + 1;
+                if (i < rest.size() && ws.find(rest[i]) == std::string_view::npos)
+                    return fail("unexpected text after the closing quote of '" + std::string(key) + "'");
+            } else {
+                value = rest.substr(eq + 1, tokEnd - eq - 1);
+                i = tokEnd;
+                if (value.empty()) return fail("expected key=value, got '" + std::string(tok) + "'");
+            }
             if (std::any_of(kv_.begin(), kv_.end(), [&](const Kv& e) { return e.key == key; }))
                 return fail("duplicate key '" + std::string(key) + "'");
-            kv_.push_back({key, tok.substr(eq + 1), false});
+            kv_.push_back({key, value, false});
         }
         return true;
     }
@@ -311,8 +329,31 @@ bool parseTrigger(Record& r, LevelData& level) {
             t.point  = r.vec3("point", t.point, true);
         } else if (*doIt == "complete") {
             t.action = TriggerAction::Complete;
+        } else if (*doIt == "prompt") {
+            t.action = TriggerAction::Prompt;
+            if (const auto txt = r.raw("text")) {
+                t.text = std::string(*txt);
+                if (const std::string why = checkPromptText(t.text); !why.empty()) r.fail(why);
+            } else {
+                r.fail("missing 'text'");
+            }
+            t.time = r.number("time", t.time);
+            if (!r.failed() && (t.time < 1.0f || t.time > 30.0f))
+                r.fail("'time' must be between 1 and 30 seconds");
+            if (const auto c = r.raw("clear_on")) {
+                static constexpr std::pair<std::string_view, PromptClear> kClear[] = {
+                    {"none", PromptClear::Timer},   {"jump", PromptClear::Jump},
+                    {"slide", PromptClear::Slide},  {"vault", PromptClear::Vault},
+                    {"wall_run", PromptClear::WallRun}, {"fire", PromptClear::Fire},
+                    {"grab", PromptClear::Grab},    {"throw", PromptClear::Throw},
+                };
+                const auto it = std::find_if(std::begin(kClear), std::end(kClear),
+                                             [&](const auto& e) { return e.first == *c; });
+                if (it == std::end(kClear)) r.fail("unknown 'clear_on' value '" + std::string(*c) + "'");
+                else t.clearOn = it->second;
+            }
         } else {
-            r.fail("unknown 'do' value '" + std::string(*doIt) + "' (open_door, checkpoint or complete)");
+            r.fail("unknown 'do' value '" + std::string(*doIt) + "' (open_door, checkpoint, complete or prompt)");
         }
     }
     r.finish();
@@ -321,7 +362,54 @@ bool parseTrigger(Record& r, LevelData& level) {
     return true;
 }
 
+bool parseLevelRecord(Record& r, LevelData& level) {
+    std::string name, next;
+    if (const auto n = r.raw("name")) name = std::string(*n);
+    else r.fail("missing 'name'");
+
+    if (const auto n = r.raw("next_level")) {
+        next = std::string(*n);
+        if (!validLevelId(next))
+            r.fail("'next_level' must be a level id (lower-case letters, digits, _): '" + next + "'");
+    }
+    TransitionType type = next.empty() ? TransitionType::Menu : TransitionType::Level;
+    if (const auto t = r.raw("transition_type")) {
+        if (*t == "menu") {
+            type = TransitionType::Menu;
+            if (!next.empty()) r.fail("'next_level' is set but transition_type=menu would ignore it");
+        } else if (*t == "level") {
+            type = TransitionType::Level;
+            if (next.empty()) r.fail("transition_type=level needs 'next_level'");
+        } else {
+            r.fail("unknown transition_type '" + std::string(*t) + "' (menu or level)");
+        }
+    }
+    r.finish();
+    if (r.failed()) return false;
+    level.name       = std::move(name);
+    level.nextLevel  = std::move(next);
+    level.transition = type;
+    return true;
+}
+
 } // namespace
+
+bool validLevelId(std::string_view id) {
+    return !id.empty() && id.size() <= 64 &&
+           std::all_of(id.begin(), id.end(), [](char c) {
+               return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_';
+           });
+}
+
+std::string levelPath(std::string_view assetDir, std::string_view id) {
+    return std::string(assetDir) + "/levels/" + std::string(id) + ".lvl";
+}
+
+LevelTransition completionTransition(const LevelData& level) {
+    if (level.transition == TransitionType::Level && validLevelId(level.nextLevel))
+        return {TransitionType::Level, level.nextLevel};
+    return {};
+}
 
 LevelLoad parseLevel(std::string_view text) {
     LevelLoad out;
@@ -340,7 +428,14 @@ LevelLoad parseLevel(std::string_view text) {
         pos = eol + 1;
         ++lineNo;
 
-        if (const std::size_t hash = line.find('#'); hash != std::string_view::npos) line = line.substr(0, hash);
+        // A '#' starts a comment unless it is inside a quoted value.
+        {
+            bool inQuote = false;
+            for (std::size_t c = 0; c < line.size(); ++c) {
+                if (line[c] == '"') inQuote = !inQuote;
+                else if (line[c] == '#' && !inQuote) { line = line.substr(0, c); break; }
+            }
+        }
         line = trim(line);
         if (line.empty()) continue;
 
@@ -354,10 +449,7 @@ LevelLoad parseLevel(std::string_view text) {
         bool ok = false;
         if (kind == "level") {
             if (haveLevel) { issue(lineNo, "duplicate 'level' record ignored"); continue; }
-            if (const auto n = r.raw("name")) level.name = std::string(*n);
-            else r.fail("missing 'name'");
-            r.finish();
-            ok = !r.failed();
+            ok = parseLevelRecord(r, level);
             haveLevel = haveLevel || ok;
         } else if (kind == "spawn") {
             if (haveSpawn) { issue(lineNo, "duplicate 'spawn' record ignored"); continue; }

@@ -33,6 +33,10 @@ public:
     // Objective line, top centre.
     static void objective(std::string_view text, float aspect, std::vector<OverlayRect>& out);
 
+    // Tutorial hint, upper centre, on a dim backing strip. `alpha` is 0..1.
+    static void tutorial(std::string_view text, float alpha, float aspect,
+                         std::vector<OverlayRect>& out);
+
 private:
     static void drawAmmo(const Weapon& w, float side, float aspect, std::vector<OverlayRect>& out);
     float hit_  = 0.0f;

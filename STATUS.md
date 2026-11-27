@@ -12,7 +12,7 @@
 ## Health Check (verified 2026-11-26)
 | Item | Result |
 |---|---|
-| Unit tests (Linux, Debug) | **Pass: 64 test cases, 13.1k assertions** (`ctest` 100%). One test is an expected failure that documents a known bug (see Known Issues #4) |
+| Unit tests (Linux, Debug) | **Pass: 85 test cases, 14.1k assertions** (`ctest` 100%). One test is an expected failure that documents a known bug (see Known Issues #4) |
 | Compiler warnings | **0** in project code (game and tests, Linux, GCC) |
 | Linux release binary | A `build/Carnage` binary from Nov 22 is present |
 | Game launched or played during this review | **No.** There was no display in the analysis environment, so gameplay is unverified |
@@ -67,11 +67,11 @@
 1. ~~Repo hygiene~~ Done (Phase 1).
 2. **Playtest and tune:** a manual play session to tune enemy damage, speed, throw damage and weapon feel. Log findings.
 3. ~~Add tests~~ Done (Phase 2). Fix the ceiling bug (Known Issues #4a).
-4. **Content:** the data-driven level format is done; next is a second level (or the Level 01 tutorial prompts and transitions), or new enemy archetypes and a boss.
+4. **Content:** the level format, tutorial prompts and level transitions are done (Phase A); next are the briefing screen (Phase B) and the Kodiak hub (Phase C), or new enemy archetypes and a boss.
 5. **CI:** a Linux and Windows build that runs the test suite.
 
 ## Risks
-- **Single level, no transitions yet:** the level format exists, but there is no `next_level` / level-to-level flow; completing the level still returns to the main menu.
+- **No second level yet:** level-to-level transitions work (`next_level` on the `level` record) but Level 01 doesn't set it, so completing it still returns to the main menu until the briefing (Phase B) and hub (Phase C) exist.
 - **Balance and feel unverified:** nothing has been playtested in this review.
 - **Windows and Linux divergence:** the line-ending and tracked-build-artifact problems will keep causing noisy diffs and merge conflicts (a README merge conflict was already hit in commit `268a3bc`).
 

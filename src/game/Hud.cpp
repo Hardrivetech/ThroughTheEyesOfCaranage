@@ -147,6 +147,16 @@ void Hud::objective(std::string_view text, float aspect, std::vector<OverlayRect
     ui::drawText(out, text, {-w * 0.5f, 0.88f}, px, aspect, {1.0f, 0.9f, 0.6f, 0.85f});
 }
 
+void Hud::tutorial(std::string_view text, float alpha, float aspect, std::vector<OverlayRect>& out) {
+    if (alpha <= 0.0f || text.empty()) return;
+    constexpr float px = 0.0065f, y = 0.66f, padX = 0.025f, padY = 0.018f;
+    const float w = ui::textWidth(text, px, aspect);
+    out.push_back({{-w * 0.5f - padX, y - 7.0f * px - padY}, {w * 0.5f + padX, y + padY},
+                   {0.0f, 0.0f, 0.0f, 0.45f * alpha}});
+    ui::drawText(out, text, {-w * 0.5f + 0.0015f / aspect, y - 0.0015f}, px, aspect, {0, 0, 0, 0.6f * alpha});
+    ui::drawText(out, text, {-w * 0.5f, y}, px, aspect, {1.0f, 1.0f, 1.0f, 0.95f * alpha});
+}
+
 void Hud::prompt(std::string_view key, std::string_view verb, float aspect,
                  std::vector<OverlayRect>& out) {
     std::string text = "PRESS [";

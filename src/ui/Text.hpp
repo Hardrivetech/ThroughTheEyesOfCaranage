@@ -13,6 +13,7 @@ namespace carnage::ui {
 // tall. Upper case only (lower case is mapped up); unknown characters are
 // skipped but still advance.
 float textWidth(std::string_view text, float px, float aspect);  // NDC-x
+bool  hasGlyph(char c);  // true if `c` (case-insensitively) can be drawn
 void  drawText(std::vector<OverlayRect>& out, std::string_view text, glm::vec2 topLeft,
                float px, float aspect, glm::vec4 color);
 

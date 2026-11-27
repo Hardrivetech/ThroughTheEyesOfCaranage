@@ -90,6 +90,8 @@ constexpr int kAdvance = 6;  // 5 pixels + 1 gap
 
 } // namespace
 
+bool hasGlyph(char c) { return find(c) != nullptr; }
+
 float textWidth(std::string_view text, float px, float aspect) {
     if (text.empty()) return 0.0f;
     return static_cast<float>(kAdvance * static_cast<int>(text.size()) - 1) * px / aspect;

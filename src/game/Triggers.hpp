@@ -1,6 +1,9 @@
 #pragma once
+#include "game/Prompts.hpp"
+
 #include <glm/glm.hpp>
 
+#include <string>
 #include <vector>
 
 namespace carnage {
@@ -8,7 +11,7 @@ namespace carnage {
 // Lightweight objective triggers. Pure data + logic (no world, audio or
 // rendering), so enter / sector-cleared behaviour is unit-testable.
 enum class TriggerCondition { PlayerEnters, SectorCleared };
-enum class TriggerAction    { OpenDoor, Checkpoint, Complete };
+enum class TriggerAction    { OpenDoor, Checkpoint, Complete, Prompt };
 
 struct TriggerVolume {
     glm::vec3        min{0.0f};
@@ -18,6 +21,9 @@ struct TriggerVolume {
     int              sector    = -1;  // SectorCleared: which enemy sector
     int              param     = 0;   // OpenDoor: door id
     glm::vec3        point{0.0f};     // Checkpoint: respawn position
+    std::string      text;            // Prompt: text to show ({key} placeholders allowed)
+    float            time      = 5.0f;  // Prompt: seconds fully visible
+    PromptClear      clearOn   = PromptClear::Timer;  // Prompt: action that dismisses it early
     bool             fired     = false;
 
     bool contains(glm::vec3 p) const {
@@ -30,6 +36,9 @@ struct TriggerEvent {
     TriggerAction action = TriggerAction::OpenDoor;
     int           param  = 0;
     glm::vec3     point{0.0f};
+    std::string   text;
+    float         time    = 5.0f;
+    PromptClear   clearOn = PromptClear::Timer;
 };
 
 class TriggerSystem {
@@ -51,7 +60,7 @@ public:
                                  : aliveInSector(t.sector) <= 0;
             if (!met) continue;
             t.fired = true;
-            events_.push_back({t.action, t.param, t.point});
+            events_.push_back({t.action, t.param, t.point, t.text, t.time, t.clearOn});
         }
         return events_;
     }

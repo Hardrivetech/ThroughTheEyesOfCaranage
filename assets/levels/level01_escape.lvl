@@ -11,6 +11,9 @@
 # Materials: concrete tile painted_metal steel brass flesh plastic emissive skin cloth leather
 
 level name=level01_escape
+# When this level is completed the game returns to the main menu. To continue into another
+# level instead, add:  next_level=<level id>   (the id of assets/levels/<id>.lvl)
+# Phase B/C of the roadmap will point this at the briefing and the hub.
 spawn pos=0,0,10
 
 # ---- Geometry ----------------------------------------------------------------
@@ -211,3 +214,30 @@ trigger when=sector_cleared sector=2 do=complete
 # Checkpoints: entering the volume sets the respawn point.
 trigger when=enter min=-16,-1,-92 max=16,6,-77 do=checkpoint point=0,0,-80    # arena entrance
 trigger when=enter min=-4,-1,-136 max=14,2,-131 do=checkpoint point=5,0,-133  # pit ledge
+
+# ---- Tutorial prompts -----------------------------------------------------------------
+# Shown when the player enters the volume (once per run). The text fades after `time`
+# seconds, or sooner once the player does what it teaches (clear_on=jump|slide|vault|
+# wall_run|fire|grab|throw). {name} shows the player's current key for that action.
+# Plain text only: letters, digits and . - + : ! % / < > [ ] , _ = ( ) ' " ? * # ; | \ @ ~
+# Order in the level: movement and melee in the corridor, then guns and explosions in
+# the arena, then seize -> shield -> throw in the pit.
+
+# Corridor: movement
+trigger when=enter min=-4,-1,8 max=4,4,15   do=prompt time=7 text="MOVE: {forward} {left} {back} {right}   SPRINT: {sprint}   JUMP: {jump}"
+trigger when=enter min=-4,-1,0 max=4,4,7    do=prompt time=9 clear_on=grab text="{grab} PICKS UP A PIPE OR BAT - {lmb} SWINGS IT"
+trigger when=enter min=-4,-1,-12 max=4,4,-6 do=prompt time=8 clear_on=vault text="HOLD {sprint} AND RUN INTO LOW COVER TO VAULT IT"
+trigger when=enter min=-4,-1,-20 max=4,4,-16 do=prompt time=10 clear_on=throw text="{grab} GRABS A BARREL - {grab} AGAIN THROWS IT - IT EXPLODES ON IMPACT"
+trigger when=enter min=-4,-1,-25 max=4,4,-21 do=prompt time=8 clear_on=slide text="CROUCH ({crouch}) WHILE SPRINTING TO SLIDE"
+trigger when=enter min=-4,-1,-32 max=4,4,-26 do=prompt time=10 clear_on=wall_run text="SPRINT + JUMP AT A WALL TO WALL-RUN - JUMP AGAIN TO KICK OFF"
+trigger when=enter min=-4,-1,-44 max=4,4,-40 do=prompt time=8 text="RUN UP RAMPS FOR HEIGHT - SLIDING DOWN ONE BUILDS SPEED"
+
+# Corridor exit: guns
+trigger when=enter min=-4,-1,-62 max=4,6,-56 do=prompt time=9 text="{lmb} FIRES - {reload_right} RELOADS - {weapon1} TO {weapon5} SWITCH WEAPONS"
+
+# Arena: dual wield and explosions
+trigger when=enter min=-16,-1,-90 max=16,6,-82 do=prompt time=10 text="HOLD {left_mod} + {weapon2} TO {weapon5} FOR A LEFT-HAND WEAPON - {rmb} FIRES IT"
+trigger when=enter min=-16,-1,-110 max=16,6,-100 do=prompt time=10 text="ROCKETS ({weapon5}) BLAST GROUPS - FIRE AT YOUR FEET TO ROCKET JUMP"
+
+# Pit: seize, shield, throw
+trigger when=enter min=-4,-1,-136 max=14,2,-131 do=prompt time=14 clear_on=throw text="PUNCH TO STAGGER - {grab} SEIZES IT AS A SHIELD - {grab} AGAIN THROWS IT"

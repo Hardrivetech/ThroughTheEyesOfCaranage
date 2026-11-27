@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
 #include <string>
 
@@ -62,7 +63,7 @@ TEST_CASE("The shipped level has the expected three-sector layout", "[level]") {
     CHECK(L.targets.size() == 8);
     CHECK(L.pickups.size() == 6);
     CHECK(L.enemies.size() == 11);
-    CHECK(L.triggers.size() == 5);
+    CHECK(L.triggers.size() == 16);  // 3 objectives + 2 checkpoints + 11 prompts
 
     int perSector[3] = {0, 0, 0};
     int melee = 0, ranged = 0;
@@ -93,18 +94,71 @@ TEST_CASE("The shipped level has the expected three-sector layout", "[level]") {
     CHECK(countDoor(L.world, 1) == 1);
     CHECK(countDoor(L.world, 2) == 0);
 
-    // Triggers: three sector objectives and two checkpoints.
-    int cleared = 0, checkpoints = 0, completes = 0, opens = 0;
+    // Triggers: three sector objectives, two checkpoints and the tutorial prompts.
+    int cleared = 0, checkpoints = 0, completes = 0, opens = 0, prompts = 0;
     for (const TriggerVolume& t : L.triggers) {
         cleared     += t.condition == TriggerCondition::SectorCleared;
         checkpoints += t.action == TriggerAction::Checkpoint;
         completes   += t.action == TriggerAction::Complete;
         opens       += t.action == TriggerAction::OpenDoor;
+        prompts     += t.action == TriggerAction::Prompt;
     }
     CHECK(cleared == 3);
     CHECK(checkpoints == 2);
     CHECK(completes == 1);
     CHECK(opens == 2);
+    CHECK(prompts == 11);
+
+    // Until a briefing/hub exists, completing the level returns to the menu.
+    CHECK(L.transition == TransitionType::Menu);
+    CHECK(L.nextLevel.empty());
+}
+
+TEST_CASE("The shipped level's tutorial prompts are well placed", "[level][prompts]") {
+    const LevelLoad r = loadLevelFile(kShipped);
+    REQUIRE(r.clean());
+    const LevelData& L = r.level;
+
+    std::vector<const TriggerVolume*> prompts;
+    for (const TriggerVolume& t : L.triggers)
+        if (t.action == TriggerAction::Prompt) prompts.push_back(&t);
+    REQUIRE(prompts.size() == 11);
+
+    const auto overlap = [](const TriggerVolume& a, const TriggerVolume& b) {
+        return a.min.x <= b.max.x && b.min.x <= a.max.x && a.min.y <= b.max.y && b.min.y <= a.max.y &&
+               a.min.z <= b.max.z && b.min.z <= a.max.z;
+    };
+    for (std::size_t i = 0; i < prompts.size(); ++i) {
+        const TriggerVolume& a = *prompts[i];
+        CHECK(a.condition == TriggerCondition::PlayerEnters);
+        CHECK_FALSE(a.text.empty());
+        CHECK(checkPromptText(a.text).empty());
+        // A player standing on the floor in the middle of the volume must be inside it.
+        const glm::vec3 mid = (a.min + a.max) * 0.5f;
+        const auto g = L.world.ground({mid.x, mid.z}, a.max.y);
+        REQUIRE(g.has_value());
+        CHECK(g->height >= a.min.y);
+        CHECK(g->height <= a.max.y);
+        // Volumes must not overlap: two prompts firing together would drown one out.
+        for (std::size_t j = i + 1; j < prompts.size(); ++j)
+            CHECK_FALSE(overlap(a, *prompts[j]));
+    }
+    CHECK(prompts.front()->contains(L.spawn));  // the first hint shows as soon as play starts
+
+    // Each teaching prompt names a real action the player can do, and each mechanic is covered.
+    bool vault = false, slide = false, wallRun = false, grab = false, thrown = false;
+    for (const TriggerVolume* t : prompts) {
+        vault   = vault   || t->clearOn == PromptClear::Vault;
+        slide   = slide   || t->clearOn == PromptClear::Slide;
+        wallRun = wallRun || t->clearOn == PromptClear::WallRun;
+        grab    = grab    || t->clearOn == PromptClear::Grab;
+        thrown  = thrown  || t->clearOn == PromptClear::Throw;
+    }
+    CHECK(vault);
+    CHECK(slide);
+    CHECK(wallRun);
+    CHECK(grab);
+    CHECK(thrown);
 }
 
 TEST_CASE("Everything in the shipped level stands on solid ground", "[level]") {
@@ -145,7 +199,7 @@ TEST_CASE("The shipped level spawns into the live systems and runs its objective
     CHECK(enemies.totalInSector(1) == 4);
     CHECK(enemies.totalInSector(2) == 3);
     CHECK(interact.pickups().size() == 6);
-    CHECK(triggers.volumes().size() == 5);
+    CHECK(triggers.volumes().size() == 16);
     CHECK(triggers.activeSector() == 0);
 
     const auto alive = [&](int s) { return enemies.aliveInSector(combat, s); };
@@ -155,37 +209,49 @@ TEST_CASE("The shipped level spawns into the live systems and runs its objective
     };
     const glm::vec3 spawn = L.spawn;
 
+    // Prompts fire as the player walks around; these tests care about objectives.
+    const auto objectives = [](const std::vector<TriggerEvent>& all) {
+        std::vector<TriggerEvent> out;
+        for (const TriggerEvent& e : all)
+            if (e.action != TriggerAction::Prompt) out.push_back(e);
+        return out;
+    };
+
     SECTION("objectives fire in order: door, gate, then level complete") {
-        CHECK(triggers.update(spawn, alive).empty());
+        // Starting play shows the first tutorial prompt and nothing else.
+        const auto start = triggers.update(spawn, alive);
+        REQUIRE(start.size() == 1);
+        CHECK(start[0].action == TriggerAction::Prompt);
+        CHECK(start[0].text.find("{forward}") != std::string::npos);  // unexpanded: the game expands it
 
         killSector(0);
-        auto ev = triggers.update(spawn, alive);
+        auto ev = objectives(triggers.update(spawn, alive));
         REQUIRE(ev.size() == 1);
         CHECK(ev[0].action == TriggerAction::OpenDoor);
         CHECK(ev[0].param == 0);
         CHECK(triggers.activeSector() == 1);
 
         killSector(1);
-        ev = triggers.update(spawn, alive);
+        ev = objectives(triggers.update(spawn, alive));
         REQUIRE(ev.size() == 1);
         CHECK(ev[0].action == TriggerAction::OpenDoor);
         CHECK(ev[0].param == 1);
 
         killSector(2);
-        ev = triggers.update(spawn, alive);
+        ev = objectives(triggers.update(spawn, alive));
         REQUIRE(ev.size() == 1);
         CHECK(ev[0].action == TriggerAction::Complete);
         CHECK(triggers.activeSector() == -1);
-        CHECK(triggers.update(spawn, alive).empty());  // fires once
+        CHECK(objectives(triggers.update(spawn, alive)).empty());  // fires once
     }
     SECTION("walking into the arena and pit ledge sets checkpoints, once each") {
-        const auto arena = triggers.update({0.0f, 0.0f, -80.0f}, alive);
+        const auto arena = objectives(triggers.update({0.0f, 0.0f, -80.0f}, alive));
         REQUIRE(arena.size() == 1);
         CHECK(arena[0].action == TriggerAction::Checkpoint);
         CHECK(near(arena[0].point, {0.0f, 0.0f, -80.0f}));
-        CHECK(triggers.update({0.0f, 0.0f, -80.0f}, alive).empty());
+        CHECK(objectives(triggers.update({0.0f, 0.0f, -80.0f}, alive)).empty());
 
-        const auto pit = triggers.update({5.0f, 0.0f, -133.0f}, alive);
+        const auto pit = objectives(triggers.update({5.0f, 0.0f, -133.0f}, alive));
         REQUIRE(pit.size() == 1);
         CHECK(pit[0].action == TriggerAction::Checkpoint);
         CHECK(near(pit[0].point, {5.0f, 0.0f, -133.0f}));
@@ -386,6 +452,20 @@ TEST_CASE("Each kind of malformed line is skipped with a useful message", "[leve
         {"trigger when=sector_cleared do=complete",              "missing 'sector'"},
         {"trigger when=sector_cleared sector=-1 do=complete",    "'sector' must be >= 0"},
         {"trigger when=sector_cleared sector=0 do=open_door",    "missing 'door'"},
+        // prompts
+        {"trigger when=enter min=0,0,0 max=1,1,1 do=prompt",                         "missing 'text'"},
+        {"trigger when=enter min=0,0,0 max=1,1,1 do=prompt text=\"\"",               "prompt text is empty"},
+        {"trigger when=enter min=0,0,0 max=1,1,1 do=prompt text=\"PRESS {nope}\"",   "unknown placeholder '{nope}'"},
+        {"trigger when=enter min=0,0,0 max=1,1,1 do=prompt text=\"PRESS {jump\"",    "unterminated '{'"},
+        {"trigger when=enter min=0,0,0 max=1,1,1 do=prompt text=\"JUMP}\"",          "stray '}'"},
+        {"trigger when=enter min=0,0,0 max=1,1,1 do=prompt text=\"COST $5\"",        "cannot be drawn"},
+        {"trigger when=enter min=0,0,0 max=1,1,1 do=prompt text=\"JUMP",             "unterminated quote"},
+        {"trigger when=enter min=0,0,0 max=1,1,1 do=prompt text=\"JUMP\"x",          "after the closing quote"},
+        {"trigger when=enter min=0,0,0 max=1,1,1 do=prompt text=HELLO time=0",       "'time' must be between"},
+        {"trigger when=enter min=0,0,0 max=1,1,1 do=prompt text=HELLO time=99",      "'time' must be between"},
+        {"trigger when=enter min=0,0,0 max=1,1,1 do=prompt text=HELLO clear_on=dance", "unknown 'clear_on'"},
+        {"trigger when=enter min=0,0,0 max=1,1,1 do=complete text=HELLO",            "unknown key 'text'"},
+        {"trigger when=enter min=0,0,0 max=1,1,1 do=checkpoint point=0,0,0 time=3",  "unknown key 'time'"},
     };
 
     for (const Bad& c : cases) {
@@ -540,3 +620,216 @@ TEST_CASE("Loading from disk", "[level][io]") {
         CHECK(r.level.world.blocks().size() == 1);
     }
 }
+
+// ---------------------------------------------------------------------------
+// Prompt triggers
+// ---------------------------------------------------------------------------
+
+TEST_CASE("Prompt triggers parse their text, timing and clear action", "[level][prompts][parse]") {
+    const LevelLoad r = parseLevel(withLine(
+        "trigger when=enter min=0,0,0 max=2,2,2 do=prompt text=\"JUMP: {jump}  # not a comment\" time=6 clear_on=jump  # a comment\n"
+        "trigger when=enter min=5,0,0 max=7,2,2 do=prompt text=SHORT\n"
+        "trigger when=enter min=9,0,0 max=11,2,2 do=prompt text=\"A\" clear_on=none\n"
+        "enemy pos=0,0,0 type=melee sector=0\n"
+        "trigger when=sector_cleared sector=0 do=prompt text=\"WELL DONE\" time=3"));
+    REQUIRE(r.clean());
+    REQUIRE(r.level.triggers.size() == 4);
+
+    const TriggerVolume& a = r.level.triggers[0];
+    CHECK(a.action == TriggerAction::Prompt);
+    CHECK(a.text == "JUMP: {jump}  # not a comment");  // '#' inside quotes is text
+    CHECK(a.time == 6.0f);
+    CHECK(a.clearOn == PromptClear::Jump);
+
+    const TriggerVolume& b = r.level.triggers[1];
+    CHECK(b.text == "SHORT");
+    CHECK(b.time == 5.0f);                       // default
+    CHECK(b.clearOn == PromptClear::Timer);      // default
+    CHECK(r.level.triggers[2].clearOn == PromptClear::Timer);  // explicit none
+
+    const TriggerVolume& c = r.level.triggers[3];  // prompts work on any condition
+    CHECK(c.condition == TriggerCondition::SectorCleared);
+    CHECK(c.text == "WELL DONE");
+}
+
+TEST_CASE("Every clear_on name maps to its action", "[level][prompts][parse]") {
+    struct Row { const char* name; PromptClear want; };
+    const Row rows[] = {
+        {"none", PromptClear::Timer},     {"jump", PromptClear::Jump},   {"slide", PromptClear::Slide},
+        {"vault", PromptClear::Vault},    {"wall_run", PromptClear::WallRun}, {"fire", PromptClear::Fire},
+        {"grab", PromptClear::Grab},      {"throw", PromptClear::Throw},
+    };
+    for (const Row& row : rows) {
+        INFO(row.name);
+        const LevelLoad r = parseLevel(withLine(
+            std::string("trigger when=enter min=0,0,0 max=1,1,1 do=prompt text=HI clear_on=") + row.name));
+        REQUIRE(r.clean());
+        REQUIRE(r.level.triggers.size() == 1);
+        CHECK(r.level.triggers[0].clearOn == row.want);
+    }
+}
+
+TEST_CASE("Prompt text is limited to what fits on screen", "[level][prompts][malformed]") {
+    const std::string ok(kMaxPromptChars, 'A');
+    const std::string tooLong(kMaxPromptChars + 1, 'A');
+    CHECK(parseLevel(withLine("trigger when=enter min=0,0,0 max=1,1,1 do=prompt text=" + ok)).clean());
+
+    const LevelLoad r = parseLevel(withLine("trigger when=enter min=0,0,0 max=1,1,1 do=prompt text=" + tooLong));
+    REQUIRE(r.issues.size() == 1);
+    CHECK(mentions(r.issues[0], "too long"));
+    CHECK(r.level.triggers.empty());
+
+    // The limit applies to what is shown, i.e. after {keys} are filled in.
+    const std::string expands = "{rmb} {rmb} {rmb} {rmb} {rmb} {rmb} {rmb} {rmb} {rmb} {rmb} {rmb} {rmb}";  // 71 chars raw
+    CHECK(expands.size() < kMaxPromptChars);
+    const LevelLoad r2 = parseLevel(withLine("trigger when=enter min=0,0,0 max=1,1,1 do=prompt text=\"" + expands + "\""));
+    REQUIRE(r2.issues.size() == 1);
+    CHECK(mentions(r2.issues[0], "too long"));
+}
+
+// ---------------------------------------------------------------------------
+// Level transitions
+// ---------------------------------------------------------------------------
+
+TEST_CASE("Level ids and paths", "[level][transition]") {
+    CHECK(validLevelId("level01_escape"));
+    CHECK(validLevelId("kodiak_hub"));
+    CHECK(validLevelId("a"));
+    CHECK_FALSE(validLevelId(""));
+    CHECK_FALSE(validLevelId("Level01"));          // upper case
+    CHECK_FALSE(validLevelId("../etc/passwd"));    // no path traversal
+    CHECK_FALSE(validLevelId("level 01"));
+    CHECK_FALSE(validLevelId("level01.lvl"));
+    CHECK_FALSE(validLevelId("a/b"));
+    CHECK_FALSE(validLevelId(std::string(65, 'a')));
+    CHECK(validLevelId(std::string(64, 'a')));
+
+    CHECK(levelPath("/game/assets", "level02") == "/game/assets/levels/level02.lvl");
+}
+
+TEST_CASE("Transition metadata parses and defaults sensibly", "[level][transition][parse]") {
+    SECTION("no metadata: back to the menu") {
+        const LevelLoad r = parseLevel("level name=x\nspawn pos=0,0,0\nblock min=0,0 max=1,1 top=1\n");
+        REQUIRE(r.clean());
+        CHECK(r.level.transition == TransitionType::Menu);
+        CHECK(r.level.nextLevel.empty());
+        const LevelTransition t = completionTransition(r.level);
+        CHECK(t.type == TransitionType::Menu);
+        CHECK(t.next.empty());
+    }
+    SECTION("next_level alone implies a level transition") {
+        const LevelLoad r = parseLevel("level name=x next_level=level02\nspawn pos=0,0,0\nblock min=0,0 max=1,1 top=1\n");
+        REQUIRE(r.clean());
+        CHECK(r.level.transition == TransitionType::Level);
+        CHECK(r.level.nextLevel == "level02");
+        const LevelTransition t = completionTransition(r.level);
+        CHECK(t.type == TransitionType::Level);
+        CHECK(t.next == "level02");
+    }
+    SECTION("explicit transition_type") {
+        const LevelLoad a = parseLevel("level name=x next_level=hub transition_type=level\nspawn pos=0,0,0\nblock min=0,0 max=1,1 top=1\n");
+        REQUIRE(a.clean());
+        CHECK(a.level.transition == TransitionType::Level);
+        const LevelLoad b = parseLevel("level name=x transition_type=menu\nspawn pos=0,0,0\nblock min=0,0 max=1,1 top=1\n");
+        REQUIRE(b.clean());
+        CHECK(b.level.transition == TransitionType::Menu);
+    }
+}
+
+TEST_CASE("Bad transition metadata is reported and ignored", "[level][transition][malformed]") {
+    struct Bad { const char* line; const char* expect; };
+    const Bad cases[] = {
+        {"level name=x next_level=Level02",                          "must be a level id"},
+        {"level name=x next_level=../secrets",                       "must be a level id"},
+        {"level name=x next_level=a/b",                              "must be a level id"},
+        {"level name=x transition_type=level",                       "needs 'next_level'"},
+        {"level name=x next_level=hub transition_type=menu",         "would ignore it"},
+        {"level name=x transition_type=teleport",                    "unknown transition_type"},
+        {"level next_level=hub",                                     "missing 'name'"},
+    };
+    for (const Bad& c : cases) {
+        INFO("line: " << c.line);
+        const LevelLoad r = parseLevel(std::string(c.line) + "\nspawn pos=0,0,0\nblock min=0,0 max=1,1 top=1\n");
+        REQUIRE(r.issues.size() == 1);
+        CHECK(r.issues[0].line == 1);
+        CHECK(mentions(r.issues[0], c.expect));
+        // The whole record was rejected: nothing half-applied.
+        CHECK(r.level.name == "unnamed");
+        CHECK(r.level.nextLevel.empty());
+        CHECK(completionTransition(r.level).type == TransitionType::Menu);
+    }
+}
+
+TEST_CASE("completionTransition never points at an invalid level", "[level][transition]") {
+    LevelData d;
+    d.transition = TransitionType::Level;
+    d.nextLevel  = "../bad";
+    CHECK(completionTransition(d).type == TransitionType::Menu);
+    d.nextLevel.clear();
+    CHECK(completionTransition(d).type == TransitionType::Menu);
+    d.nextLevel = "ok_level";
+    CHECK(completionTransition(d).type == TransitionType::Level);
+}
+
+TEST_CASE("Completing a level chains into the next one from disk", "[level][transition][io]") {
+    namespace fs = std::filesystem;
+    const fs::path root = "carnage_test_assets";
+    fs::create_directories(root / "levels");
+    const auto write = [&](const char* id, const char* body) {
+        std::ofstream(root / "levels" / (std::string(id) + ".lvl")) << body;
+    };
+    write("first",  "level name=first next_level=second\nspawn pos=0,0,0\nblock min=-5,-5 max=5,5 top=0\n"
+                    "enemy pos=0,0,0 type=melee sector=0\ntrigger when=sector_cleared sector=0 do=complete\n");
+    write("second", "level name=second\nspawn pos=3,0,3\nblock min=-9,-9 max=9,9 top=2\n");
+
+    const std::string assets = root.string();
+    LevelLoad current = loadLevelFile(levelPath(assets, "first"));
+    REQUIRE(current.clean());
+    CHECK(current.level.name == "first");
+
+    const LevelTransition t = completionTransition(current.level);
+    REQUIRE(t.type == TransitionType::Level);
+    LevelLoad next = loadLevelFile(levelPath(assets, t.next));
+    REQUIRE(next.clean());
+    CHECK(next.level.name == "second");
+    CHECK(completionTransition(next.level).type == TransitionType::Menu);  // the chain ends
+
+    SECTION("a missing next level is detectable, so the game can fall back to the menu") {
+        write("dead_end", "level name=dead_end next_level=does_not_exist\nspawn pos=0,0,0\nblock min=0,0 max=1,1 top=1\n");
+        const LevelLoad d = loadLevelFile(levelPath(assets, "dead_end"));
+        REQUIRE(d.clean());
+        const LevelTransition dt = completionTransition(d.level);
+        CHECK(dt.type == TransitionType::Level);
+        CHECK_FALSE(loadLevelFile(levelPath(assets, dt.next)).opened);
+    }
+    fs::remove_all(root);
+}
+
+TEST_CASE("Replacing a loaded level in place keeps existing references valid", "[level][transition]") {
+    // main.cpp keeps `World&`, Combat and MovementController bound to loaded.level.world
+    // and swaps levels by assigning to `loaded`. That only works if the address is stable.
+    LevelLoad loaded = parseLevel("level name=a\nspawn pos=0,0,0\nblock min=-30,-5 max=30,5 top=0\n"
+                                  "block min=10,-5 max=11,5 top=4\n");
+    REQUIRE(loaded.clean());
+    World& world = loaded.level.world;
+    const World* before = &world;
+    Combat combat(world);
+    MovementController player(world);
+    CHECK(world.raycast({0.0f, 1.0f, 0.0f}, {1.0f, 0.0f, 0.0f}, 50.0f)->t == Approx(10.0f));
+
+    loaded = parseLevel("level name=b\nspawn pos=0,0,0\nblock min=-30,-5 max=30,5 top=0\n"
+                        "block min=20,-5 max=21,5 top=4\n");
+    REQUIRE(loaded.clean());
+    CHECK(loaded.level.name == "b");
+    CHECK(&world == before);
+    CHECK(&combat.world() == before);
+    CHECK(world.blocks().size() == 2);
+    CHECK(world.raycast({0.0f, 1.0f, 0.0f}, {1.0f, 0.0f, 0.0f}, 50.0f)->t == Approx(20.0f));  // new geometry
+
+    player.respawn({0.0f, 0.0f, 0.0f});
+    MoveInput in;
+    in.move = {1.0f, 0.0f};
+    for (int i = 0; i < 600; ++i) player.tick(kDt, 0.0f, in);
+    CHECK(player.position().x > 12.0f);  // walked through where the old wall (x 10..11) was
+}
+

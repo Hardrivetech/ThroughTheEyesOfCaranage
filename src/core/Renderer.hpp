@@ -33,6 +33,7 @@ bool uploadWorld(const World& world);
 // or -1 on failure.
 int  loadMesh(const char* relativePath);
 void addProp(int meshId, const glm::mat4& model, const glm::vec3& color, Material material);
+void clearProps();  // drops every prop (call before building a new level's props)
 
 // Re-reads every shader from disk; a shader that fails to compile keeps its
 // previous program. Bound to F5 in main.

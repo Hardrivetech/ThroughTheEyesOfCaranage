@@ -636,6 +636,8 @@ void addProp(int meshId, const glm::mat4& model, const glm::vec3& color, Materia
     g_props.push_back({meshId, model, color, material});
 }
 
+void clearProps() { g_props.clear(); }
+
 void renderScene(const SceneParams& p, std::span<const DrawBox> boxes,
                  std::span<const DrawBox> viewmodel) {
     const glm::mat4 invView = glm::inverse(p.view);

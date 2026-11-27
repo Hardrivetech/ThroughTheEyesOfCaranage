@@ -67,7 +67,12 @@ pickup  kind=pipe pos=1.6,0.06,4 yaw=0.4
 trigger when=sector_cleared sector=0 do=open_door door=0
 trigger when=enter min=-16,-1,-92 max=16,6,-77 do=checkpoint point=0,0,-80
 trigger when=sector_cleared sector=2 do=complete
+trigger when=enter min=-4,-1,-32 max=4,4,-26 do=prompt time=10 clear_on=wall_run text="SPRINT + JUMP AT A WALL TO WALL-RUN"
 ```
+
+**Tutorial prompts** (`do=prompt`) show a short hint when the player enters a volume. The text fades after `time` seconds, or sooner once the player does what it teaches (`clear_on=jump|slide|vault|wall_run|fire|grab|throw`). `{name}` placeholders show the player's current key for an action (`{grab}`, `{sprint}`, `{weapon1}`, `{lmb}`, ...). The loader checks the text, so a typo'd placeholder, a character the HUD font can't draw, or a line that is too long (90 characters once keys are filled in) is reported instead of showing garbage.
+
+**Level transitions:** put `next_level=<id>` on the `level` record to continue into `assets/levels/<id>.lvl` when the level is completed (by clearing its `complete` sector or the `win` console command). Without it the game returns to the main menu. If the next level can't be loaded the game logs an error and falls back to the menu.
 
 The loader (`src/game/Level.hpp`) never aborts on a bad line: it skips the line, logs `file:line: message`, and keeps loading. It also rejects typo'd keys, and drops triggers that could never work (a door id that doesn't exist, or a sector with no enemies). See the header for the full record reference.
 
