@@ -547,15 +547,11 @@ TEST_CASE("Falling out of the world respawns; noclip flies", "[movement]") {
 }
 
 TEST_CASE("Jumping under a low overhead slab bonks instead of shoving sideways",
-          "[movement][ceiling][!shouldfail]") {
-    // KNOWN BUG (found while writing these tests, not yet fixed):
-    // MovementController::tick() calls World::resolveWalls() *before* the ceiling
-    // clamp. resolveWalls treats a slab as a wall once its underside is below
-    // feet + 1.9 m, which a rising jump crosses mid-tick, so the player is pushed
-    // out through the side of the slab (50 m under a full-width slab; ~2 m under
-    // the arena's 2.9 m catwalks). Applying the ceiling clamp first fixes it.
-    // [!shouldfail] keeps the suite green while the bug exists; once it is fixed
-    // this test will report a failure: delete the tag and it becomes a regression test.
+          "[movement][ceiling]") {
+    // Regression test. MovementController::tick() used to call World::resolveWalls()
+    // before the ceiling clamp; resolveWalls treats a slab as a wall once its underside
+    // is below feet + 1.9 m, which a rising jump crosses mid-tick, so the player was
+    // pushed out through the side of the slab (50 m under a full-width slab).
     const MovementConfig cfg;
     World w = floorWorld();
     const float underside = 2.6f;

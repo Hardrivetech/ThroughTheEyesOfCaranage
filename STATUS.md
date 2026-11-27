@@ -12,7 +12,7 @@
 ## Health Check (verified 2026-11-26)
 | Item | Result |
 |---|---|
-| Unit tests (Linux, Debug) | **Pass: 85 test cases, 14.1k assertions** (`ctest` 100%). One test is an expected failure that documents a known bug (see Known Issues #4) |
+| Unit tests (Linux, Debug) | **Pass: 86 test cases, 15.1k assertions** (`ctest` 100%), no expected failures |
 | Compiler warnings | **0** in project code (game and tests, Linux, GCC) |
 | Linux release binary | A `build/Carnage` binary from Nov 22 is present |
 | Game launched or played during this review | **No.** There was no display in the analysis environment, so gameplay is unverified |
@@ -50,7 +50,7 @@
 3. ~~README out of date~~ **Fixed (Phase 1):** dependencies, feature set, controls and Linux and Windows build commands are now accurate.
 4. **Balance is untuned:** `EnemyConfig` in `src/game/Enemy.hpp` is explicitly labelled "all values are untuned guesses".
 5. ~~Test coverage gaps~~ **Fixed (Phase 2):** new tests cover `World` queries and raycasts, `MovementController` (acceleration, jump, coyote and buffer, ramps, slide, vault, wall-run, ceiling, void respawn, determinism), the 60 Hz loop, `Combat` (hitscan, headshots, melee, explosions and falloff, rockets, blast impulse), `Weapon` state machine and recoil, and health/armor/i-frame interaction. They live in `tests/test_world.cpp`, `tests/test_movement.cpp` and `tests/test_combat.cpp`. A mutation check (5 deliberately injected bugs) was caught by the suite each time.
-4a. **BUG (found in Phase 2, unfixed):** jumping under a low overhead slab shoves the player sideways through it (about 2 m under the arena's 2.9 m catwalks, 50 m under a full-width slab). `MovementController::tick()` runs `World::resolveWalls()` before the ceiling clamp, and `resolveWalls` treats a slab as a wall once its underside is below feet + 1.9 m. Moving the ceiling clamp ahead of `resolveWalls` fixes it in a scratch test. It is tracked by the `[!shouldfail]` test "Jumping under a low overhead slab bonks instead of shoving sideways"; remove that tag when fixing.
+4a. ~~BUG~~ **Fixed:** jumping under a low overhead slab used to shove the player sideways through it (about 2 m under the arena's 2.9 m catwalks). `MovementController::tick()` ran `World::resolveWalls()` before the ceiling clamp; the clamp now runs first. Guarded by two regression tests (a synthetic slab and the real arena catwalks).
 6. ~~Hard-coded content~~ **Fixed (Phase 3):** the level now lives in `assets/levels/level01_escape.lvl`, read by `src/game/Level.cpp` (`LevelLoader`). `World::testLevel()` and the `populate*` functions in `main.cpp` are gone. The loader tolerates malformed lines and reports them; see `tests/test_level.cpp`.
 7. **Build needs the network:** CMake fetches dependencies through FetchContent, and GLAD generation needs Python with jinja2.
 
@@ -66,7 +66,7 @@
 ## Recommended Next Steps (priority order)
 1. ~~Repo hygiene~~ Done (Phase 1).
 2. **Playtest and tune:** a manual play session to tune enemy damage, speed, throw damage and weapon feel. Log findings.
-3. ~~Add tests~~ Done (Phase 2). Fix the ceiling bug (Known Issues #4a).
+3. ~~Add tests~~ Done (Phase 2). (Ceiling bug fixed, see 4a.)
 4. **Content:** the level format, tutorial prompts and level transitions are done (Phase A); next are the briefing screen (Phase B) and the Kodiak hub (Phase C), or new enemy archetypes and a boss.
 5. **CI:** a Linux and Windows build that runs the test suite.
 

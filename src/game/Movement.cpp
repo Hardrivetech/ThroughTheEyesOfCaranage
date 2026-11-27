@@ -115,15 +115,10 @@ void MovementController::tick(float dt, float yaw, const MoveInput& in) {
     if (grounded_) groundMove(f, h);
     else           airMove(f, h);
 
-    // Horizontal collision against walls, for every state.
+    // Ceiling first: clamping the head before wall resolution stops an overhead
+    // slab being mistaken for a wall (resolveWalls treats a slab as one once its
+    // underside is below feet + body height, which a rising jump crosses mid-tick).
     glm::vec2 p{pos_.x, pos_.z};
-    world_.resolveWalls(p, pos_.y, cfg_.radius, cfg_.stepHeight, h);
-    pos_.x = p.x;
-    pos_.z = p.y;
-    vel_.x = h.x;
-    vel_.z = h.y;
-
-    // Ceiling / overhead collision check.
     const float headTop = pos_.y + eye_ + 0.20f;
     if (const auto ceilY = world_.ceiling(p, pos_.y, headTop + 0.1f)) {
         if (headTop > *ceilY) {
@@ -131,6 +126,13 @@ void MovementController::tick(float dt, float yaw, const MoveInput& in) {
             if (vel_.y > 0.0f) vel_.y = 0.0f;
         }
     }
+
+    // Horizontal collision against walls, for every state.
+    world_.resolveWalls(p, pos_.y, cfg_.radius, cfg_.stepHeight, h);
+    pos_.x = p.x;
+    pos_.z = p.y;
+    vel_.x = h.x;
+    vel_.z = h.y;
 
     updateCamera(f);
 

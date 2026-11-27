@@ -292,6 +292,37 @@ TEST_CASE("Doors from the level file block the player until opened", "[level][do
     }
 }
 
+TEST_CASE("Jumping under the arena catwalks bonks the head instead of shoving sideways", "[level][movement][ceiling]") {
+    LevelLoad r = loadLevelFile(kShipped);
+    REQUIRE(r.clean());
+    const World& w = r.level.world;
+    const MovementConfig cfg;
+
+    // The three catwalk spans, all with their underside at 2.9 m.
+    const glm::vec3 spots[] = {
+        {-14.25f, 0.0f, -100.0f},  // left catwalk
+        {0.0f, 0.0f, -126.0f},     // back bridge
+        {13.0f, 0.0f, -112.0f},    // right catwalk
+    };
+    for (const glm::vec3& start : spots) {
+        INFO("jumping at " << start.x << ", " << start.z);
+        MovementController mc(w, cfg);
+        mc.respawn(start);
+        float peak = 0.0f, drift = 0.0f;
+        for (int i = 0; i < 360; ++i) {
+            MoveInput in;
+            in.jumpPressed = mc.grounded();  // hop again every time we land
+            mc.tick(kDt, 0.0f, in);
+            peak  = std::max(peak, mc.position().y);
+            drift = std::max(drift, glm::length(glm::vec2(mc.position().x - start.x, mc.position().z - start.z)));
+            REQUIRE(mc.position().y + cfg.standEye + 0.2f <= 2.9f + 1e-3f);  // head never enters the slab
+        }
+        CHECK(drift < 0.01f);
+        CHECK(peak > 0.9f);                      // it did jump...
+        CHECK(peak < 2.9f - cfg.standEye);       // ...and was stopped by the catwalk
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Parsing: what each record produces
 // ---------------------------------------------------------------------------
