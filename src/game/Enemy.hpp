@@ -5,6 +5,7 @@
 
 #include <glm/glm.hpp>
 
+#include <algorithm>
 #include <cstddef>
 #include <vector>
 
@@ -97,6 +98,9 @@ struct Enemy {
     SeizeSub    sub = SeizeSub::None;  // only meaningful while state == Seized
     float       seizeTimer = 0.0f;     // stagger time remaining
     glm::vec3   vel3{0.0f};            // thrown flight velocity
+    bool        asleep    = false;     // far from the player: the brain is not run (see ActivationConfig)
+    float       keepAwake = 0.0f;      // seconds left during which this enemy may not fall asleep
+    float       lastHp    = -1.0f;     // hit points last tick, to notice damage while asleep (-1 = unknown)
 };
 
 inline float attackReach(const Enemy& e, const EnemyConfig& c) {
@@ -172,16 +176,63 @@ struct EnemyAttack {
     bool      shielded = false;  // absorbed by the human shield (damage == 0)
 };
 
+// Distance-based AI activation. This is a performance setting, not balance: an enemy far
+// from the player cannot see or hear them, so its brain (vision raycast, movement, ground
+// and wall queries) is simply not run until the player comes near, and it stands still.
+// Sleeping enemies still exist: they count as alive for objectives and can be shot.
+struct ActivationConfig {
+    float wakeRadius  = 50.0f;  // metres: a sleeping enemy wakes when the player is this close. <= 0 turns
+                                // sleeping off entirely (every enemy always thinks)
+    float sleepRadius = 65.0f;  // an awake enemy sleeps only when the player is farther than this. It must
+                                // exceed wakeRadius (enforced, with a gap of at least kMinGap): the band
+                                // between them is the hysteresis that stops an enemy on the boundary
+                                // flipping between asleep and awake
+    float keepAwake   = 10.0f;  // seconds a hurt or alerted enemy stays awake however far away the player is
+    float groupRadius = 18.0f;  // a hurt enemy rouses sleeping enemies within this distance of it
+    float shotAlertRadius  = 35.0f;  // a gunshot, melee blow or blast wakes sleepers this close to it
+    float meleeAlertRadius = 8.0f;
+    float blastAlertRadius = 45.0f;
+
+    static constexpr float kMinGap = 2.0f;
+    bool enabled() const { return wakeRadius > 0.0f; }
+};
+
+// Returns `a` with impossible values fixed (see the field comments).
+inline ActivationConfig sanitized(ActivationConfig a) {
+    if (!(a.wakeRadius > 0.0f)) { a.wakeRadius = 0.0f; return a; }  // also catches NaN
+    a.sleepRadius       = std::max(a.sleepRadius, a.wakeRadius + ActivationConfig::kMinGap);
+    a.keepAwake         = std::max(a.keepAwake, 0.0f);
+    a.groupRadius       = std::max(a.groupRadius, 0.0f);
+    a.shotAlertRadius   = std::max(a.shotAlertRadius, 0.0f);
+    a.meleeAlertRadius  = std::max(a.meleeAlertRadius, 0.0f);
+    a.blastAlertRadius  = std::max(a.blastAlertRadius, 0.0f);
+    return a;
+}
+
+// How many enemies were thinking, standing by, or dead on the last tick.
+struct EnemyActivity {
+    int awake = 0, asleep = 0, dead = 0;
+};
+
 // Owns the AI brains; each brain drives a Combat::Target so hitscan, melee,
 // explosions and seizing all work on enemies without special cases.
 class Enemies {
 public:
     explicit Enemies(const EnemyConfig& cfg = {}) : cfg_(cfg) {}
 
+    // Distance-based sleeping (see ActivationConfig). Values are sanitized; turning it off
+    // wakes everyone.
+    void setActivation(const ActivationConfig& a);
+    const ActivationConfig& activation() const { return act_; }
+    // Wakes every sleeping enemy within `radius` of `pos` and keeps it awake for
+    // activation().keepAwake seconds (a gunshot, an explosion, a shout).
+    void alert(const glm::vec3& pos, float radius);
+    EnemyActivity activity() const { return activity_; }
+
     // sector >= 0 marks an objective enemy: it never respawns, so "cleared"
     // is a stable condition.
     void add(Combat& combat, glm::vec3 feet, EnemyType type = EnemyType::Melee, int sector = -1);
-    void clear() { enemies_.clear(); attacks_.clear(); held_ = -1; impact_ = 0.0f; }
+    void clear() { enemies_.clear(); attacks_.clear(); held_ = -1; impact_ = 0.0f; activity_ = {}; }
 
     // Call after Combat::update so the interpolation snapshot is consistent.
     // Attacks released this tick are available from attacks() until the next call.
@@ -218,10 +269,14 @@ public:
                         float playerEyeHeight) const;
 
 private:
+    // Decides whether `e` thinks this tick. Returns false while it sleeps.
+    bool updateActivation(Enemy& e, Target& t, const glm::vec3& playerFeet, float dt);
     void move(Enemy& e, glm::vec2 wish, float speed, const World& world, float dt);
     void stepSeized(Enemy& e, Target& t, Combat& combat, const World& world, float dt);
 
     EnemyConfig        cfg_;
+    ActivationConfig   act_;
+    EnemyActivity      activity_;
     std::vector<Enemy> enemies_;
     std::vector<EnemyAttack> attacks_;
     std::vector<glm::vec3>   footsteps_;

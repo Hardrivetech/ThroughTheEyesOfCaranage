@@ -12,7 +12,7 @@
 ## Health Check (verified 2026-11-27)
 | Item | Result |
 |---|---|
-| Unit tests (Linux, Debug) | **Pass: 154 test cases** (`ctest` 100%), stable in random order, no expected failures |
+| Unit tests (Linux, Debug) | **Pass: 185 test cases** (`ctest` 100%), stable in random order, no expected failures |
 | Compiler warnings | **0** in project code (game and tests, Debug and Release, GCC on Linux) |
 | Working tree | Clean. The last commit (`e97f65b`) is not pushed yet |
 | Game launched or played | **No.** There was no display in the analysis environment, so rendering, audio, feel and the on-screen flow are unverified |
@@ -36,6 +36,7 @@
 - **Kodiak Island hub** (`kodiak_hub.lvl`): one outdoor level with a landing pad, plaza, command post (door 0) and east yard (door 1). Doors open on approach, each zone has a checkpoint, and two glowing gates are portals. `kodiak_range.lvl` is a small practice level reachable through one gate.
 - **Level network checker** (`LevelGraph`): verifies every portal, `next_level`, arrival spawn and briefing resolves, and that every level has a way back. It runs at startup and its problems are logged.
 - **Broadphase:** `World` queries (rays, ground, ceiling, wall probes, collision) run through a uniform XZ grid, so they only examine nearby blocks. Results are bit-identical to the old full scan (checked against a verbatim copy of it, including tie-breaks), and doors need no grid updates. About 157x faster for rays and 387x for collision in a 3000-block, 2 km world.
+- **AI sleep/wake and light culling:** enemies far from the player don't run their brain (vision raycast, movement, ground and wall queries) and stand still until the player comes within the wake radius (50 m; they sleep beyond 65 m, so there is no flicker on the boundary). Damage, a nearby hurt ally, a gunshot, a punch or a blast wakes them (and keeps them awake for 10 s). Sleeping enemies still count for objectives and can be shot. Room lights are culled by distance in one pass, and sounds beyond audible range skip their occlusion raycasts. `EnemyConfig` balance numbers are untouched; the radii live in a separate `ActivationConfig`. The F4 overlay and the `stats` command show awake/asleep enemies, lights submitted and world-query load.
 - **Dev tools:** backtick console (`god`, `infammo`, `noclip`, `freeze`, `stats`, `spawn`, `kill_all`, `tp x y z` / `tp <spawn>`, `open_door`/`close_door`, `level <id> [spawn]`, `briefing <id>`, `timescale`, `win`, and others), F3 dev menu, F4 profiler.
 - **Tests:** 142 cases across `World`, `Movement`, `Combat`/`Weapons`, levels, prompts, briefings and the hub. Each phase's tests were mutation-checked by injecting bugs and confirming the suite caught them.
 

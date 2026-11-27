@@ -116,6 +116,10 @@ inline void drawMenu(const DevState& d, glm::vec2 cursor, float aspect, std::vec
 struct StatsInfo {
     int ticksPerSec = 0, fps = 0;
     int particles = 0, decals = 0, enemiesAlive = 0;
+    int enemiesAwake = 0, enemiesAsleep = 0;       // of the living ones: thinking vs standing by
+    int lightsSubmitted = 0, lightsTotal = 0;      // room lights drawn this frame vs in the level
+    int worldQueriesPerSec = 0;                    // World ray/ground/wall queries answered
+    float worldBlocksPerQuery = 0.0f;              // blocks examined per query (the broadphase at work)
     int maxBoxes = 8192;
 };
 
@@ -139,7 +143,10 @@ inline void drawStats(const DevState& d, const FrameProfile& p, const StatsInfo&
             "UI RECTS " + std::to_string(p.overlayRects),
             "PARTICLES " + std::to_string(s.particles),
             "DECALS " + std::to_string(s.decals),
-            "ENEMIES " + std::to_string(s.enemiesAlive),
+            "ENEMIES " + std::to_string(s.enemiesAlive) + "  AWAKE " + std::to_string(s.enemiesAwake) +
+                "  ASLEEP " + std::to_string(s.enemiesAsleep),
+            "LIGHTS " + std::to_string(s.lightsSubmitted) + "/" + std::to_string(s.lightsTotal),
+            "WORLD " + std::to_string(s.worldQueriesPerSec) + " Q/S  " + num(s.worldBlocksPerQuery) + " BLOCKS/Q",
         };
     }
     std::string badges;

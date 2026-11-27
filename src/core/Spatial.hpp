@@ -19,6 +19,11 @@ struct SpatialParams {
     float behindDim   = 0.30f;   // extra attenuation for sounds directly behind
 };
 
+// True if a sound `distance` metres away can be heard at all. Beyond maxDistance
+// spatialize() returns gain 0 exactly, so callers may skip such sounds (and the
+// occlusion raycasts that would colour them) without changing what the player hears.
+inline bool inAudibleRange(float distance, const SpatialParams& p = {}) { return distance < p.maxDistance; }
+
 struct SpatialResult {
     float gain = 1.0f;   // 0..1 multiplier
     float pan  = 0.0f;   // -1 left .. +1 right

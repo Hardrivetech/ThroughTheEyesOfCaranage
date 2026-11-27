@@ -18,10 +18,53 @@ void Enemies::add(Combat& combat, glm::vec3 feet, EnemyType type, int sector) {
     enemies_.push_back(e);
 }
 
+void Enemies::setActivation(const ActivationConfig& a) {
+    act_ = sanitized(a);
+    if (!act_.enabled())
+        for (Enemy& e : enemies_) e.asleep = false;
+}
+
+void Enemies::alert(const glm::vec3& pos, float radius) {
+    if (!act_.enabled() || !(radius > 0.0f)) return;
+    const float r2 = radius * radius;
+    for (Enemy& e : enemies_) {
+        const glm::vec3 d = e.pos - pos;
+        if (glm::dot(d, d) > r2) continue;
+        e.asleep    = false;
+        e.keepAwake = std::max(e.keepAwake, act_.keepAwake);
+    }
+}
+
+bool Enemies::updateActivation(Enemy& e, Target& t, const glm::vec3& playerFeet, float dt) {
+    // Damage taken while asleep (a shot from afar, a thrown body) wakes the enemy and its neighbours.
+    const bool hurt = e.lastHp >= 0.0f && t.hp < e.lastHp - 1e-4f;
+    e.lastHp = t.hp;
+    if (hurt) {
+        e.keepAwake = act_.keepAwake;
+        alert(e.pos, act_.groupRadius);
+    }
+
+    const glm::vec3 d  = e.pos - playerFeet;
+    const float     d2 = glm::dot(d, d);
+    if (e.asleep) {
+        if (hurt || e.keepAwake > 0.0f || d2 <= act_.wakeRadius * act_.wakeRadius) e.asleep = false;
+    } else if (e.state != AiState::Seized && e.keepAwake <= 0.0f && d2 > act_.sleepRadius * act_.sleepRadius) {
+        e.asleep = true;
+        e.vel    = glm::vec2(0.0f);
+        e.stride = 0.0f;
+        enterState(e, AiState::Idle);  // it wakes up fresh, as if it had just noticed something
+        t.prevCenter = t.center;
+    }
+    e.keepAwake = std::max(0.0f, e.keepAwake - dt);
+    return !e.asleep;
+}
+
 bool Enemies::stagger(std::size_t targetIndex) {
     for (Enemy& e : enemies_) {
         if (e.target != targetIndex) continue;
         if (e.state == AiState::Seized) return false;
+        e.asleep    = false;
+        e.keepAwake = act_.keepAwake;
         enterState(e, AiState::Seized);
         e.sub        = SeizeSub::Staggered;
         e.seizeTimer = cfg_.staggerTime;
@@ -194,12 +237,14 @@ void Enemies::tick(float dt, Combat& combat, const World& world,
                    glm::vec3 playerFeet, float playerEyeHeight) {
     attacks_.clear();
     footsteps_.clear();
+    activity_ = {};
     const glm::vec3 chest = playerFeet + glm::vec3(0.0f, playerEyeHeight * 0.8f, 0.0f);
     for (Enemy& e : enemies_) {
         Target* t = combat.targetAt(e.target);
         if (!t) continue;
 
         if (!t->alive()) {
+            ++activity_.dead;
             e.wasAlive = false;
             e.vel = glm::vec2(0.0f);
             if (e.state == AiState::Seized) {  // died while staggered / held / in flight
@@ -214,8 +259,17 @@ void Enemies::tick(float dt, Combat& combat, const World& world,
             e.wasAlive = true;
             e.pos      = e.origin;
             e.sub      = SeizeSub::None;
+            e.asleep    = false;
+            e.keepAwake = 0.0f;
+            e.lastHp    = -1.0f;
             enterState(e, AiState::Idle);
         }
+        if (act_.enabled() && !updateActivation(e, *t, playerFeet, dt)) {
+            ++activity_.asleep;
+            t->prevCenter = t->center;  // stationary: nothing to interpolate
+            continue;
+        }
+        ++activity_.awake;
         if (e.state == AiState::Seized) {
             stepSeized(e, *t, combat, world, dt);
             t->held  = e.state == AiState::Seized && e.sub == SeizeSub::Held;

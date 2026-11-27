@@ -19,6 +19,7 @@
 #include "game/Interact.hpp"
 #include "game/Level.hpp"
 #include "game/LevelGraph.hpp"
+#include "game/Lights.hpp"
 #include "game/Movement.hpp"
 #include "game/PlayerHealth.hpp"
 #include "game/Triggers.hpp"
@@ -279,6 +280,7 @@ int main() {
                              float pitch = 1.0f) {
         const glm::vec3 d = pos - listenerPos;
         const float     len = glm::length(d);
+        if (!audio::inAudibleRange(len)) return;  // silent anyway: skip the 5 occlusion raycasts
         float occ = 0.0f;
         if (len > 1.0f) {
             // 5 probe rays (centre + 4 offsets around the source) give a soft,
@@ -323,7 +325,14 @@ int main() {
         console.add("infammo", "toggle infinite ammo [0|1]", [&](Args a) -> CmdResult { return "infammo " + flag(dev.infAmmo, a); });
         console.add("noclip", "toggle free-fly [0|1]", [&](Args a) -> CmdResult { return "noclip " + flag(dev.noclip, a); });
         console.add("freeze", "toggle enemy AI freeze [0|1]", [&](Args a) -> CmdResult { return "freeze " + flag(dev.freezeAI, a); });
-        console.add("stats", "toggle perf overlay [0|1]", [&](Args a) -> CmdResult { return "stats " + flag(dev.showStats, a); });
+        console.add("stats", "toggle perf overlay [0|1]; prints the AI / light / world-query summary", [&](Args a) -> CmdResult {
+            const std::string state = "stats " + flag(dev.showStats, a);
+            const EnemyActivity act = enemies.activity();
+            const ActivationConfig& ac = enemies.activation();
+            return std::format("{} | enemies: {} awake, {} asleep, {} dead (wake {:.0f} m, sleep {:.0f} m) | lights {}/{} | world {:.1f} blocks/query",
+                               state, act.awake, act.asleep, act.dead, ac.wakeRadius, ac.sleepRadius,
+                               statsInfo.lightsSubmitted, statsInfo.lightsTotal, statsInfo.worldBlocksPerQuery);
+        });
         console.add("heal", "restore health and armor", [&](Args) -> CmdResult {
             health.heal(PlayerHealth::kMaxHealth);
             health.addArmor(PlayerHealth::kMaxArmor);
@@ -476,7 +485,7 @@ int main() {
     std::vector<DrawBox>     boxes, viewBoxes;
     std::vector<OverlayRect> overlay;
     std::vector<PointLight>  lights;
-    std::vector<std::pair<float, std::size_t>> lightPick;
+    std::vector<std::size_t> lightPick;
     const auto               startTime = Clock::now();
 
     const LoopConfig cfg;
@@ -690,7 +699,13 @@ int main() {
                 a.muzzle = aim.origin + q * muzzleLocal(w.stats(), hand);
                 const WeaponEvents e = w.tick(fdt, t, a, combat, gameplayRng);
                 const float pitchJitter = 0.94f + 0.12f * gameplayRng.uniform();
-                if (e.fired)  { audio::play(fireSound(w.stats().name), 1.0f, side * 0.35f, pitchJitter); promptEvents.fire = true; }
+                if (e.fired)  {
+                    audio::play(fireSound(w.stats().name), 1.0f, side * 0.35f, pitchJitter);
+                    promptEvents.fire = true;
+                    // Noise wakes sleeping enemies nearby: a gunshot carries, a punch barely does.
+                    enemies.alert(player.position(), w.stats().infiniteAmmo ? enemies.activation().meleeAlertRadius
+                                                                           : enemies.activation().shotAlertRadius);
+                }
                 if (e.dryFired)       audio::play(audio::Sfx::DryFire, 0.7f, side * 0.3f);
                 if (e.reloadStarted)  audio::play(audio::Sfx::Reload, 0.8f, side * 0.3f);
                 if (e.reloadFinished) audio::play(audio::Sfx::ReloadDone, 0.8f, side * 0.3f);
@@ -822,7 +837,10 @@ int main() {
                 if (e.kind == HitKind::Body)  playAt3(audio::Sfx::HitBody, e.pos, 0.9f);
                 if (e.kind == HitKind::Head)  playAt3(audio::Sfx::HitHead, e.pos, 1.0f);
                 if (e.kind == HitKind::World) playAt3(audio::Sfx::Impact, e.pos, 0.5f);
-                if (e.kind == HitKind::Explosion) playAt3(audio::Sfx::Explosion, e.pos, 1.4f);
+                if (e.kind == HitKind::Explosion) {
+                    playAt3(audio::Sfx::Explosion, e.pos, 1.4f);
+                    enemies.alert(e.pos, enemies.activation().blastAlertRadius);
+                }
                 if (e.killed) playAt3(audio::Sfx::Kill, e.pos, 0.9f);
                 if (e.kind == HitKind::Body || e.kind == HitKind::Head) hud.hitMarker(e.killed);
                 if (e.kind == HitKind::Explosion) {
@@ -1027,18 +1045,11 @@ int main() {
             // 8 and muzzle/explosion lights need headroom).
             {
                 const glm::vec3 eyeP = player.eyePosition(a);
-                lightPick.clear();
                 const auto wl = world.lights();
-                for (std::size_t i = 0; i < wl.size(); ++i)
-                    lightPick.emplace_back(glm::distance(wl[i].pos, eyeP), i);
-                const std::size_t n = std::min<std::size_t>(4, lightPick.size());
-                std::partial_sort(lightPick.begin(), lightPick.begin() + static_cast<std::ptrdiff_t>(n),
-                                  lightPick.end());
-                for (std::size_t i = 0; i < n; ++i) {
-                    if (lightPick[i].first > 40.0f) break;
-                    const WorldLight& l = wl[lightPick[i].second];
-                    lights.push_back({l.pos, l.color, l.radius});
-                }
+                const LightSelection sel = selectLights(wl, eyeP, 4, 40.0f, lightPick);
+                for (const std::size_t i : lightPick) lights.push_back({wl[i].pos, wl[i].color, wl[i].radius});
+                statsInfo.lightsSubmitted = static_cast<int>(sel.picked);
+                statsInfo.lightsTotal     = static_cast<int>(sel.considered);
             }
             auto flashLight = [&](const Weapon& w, Hand h) {
                 if (!w.flashing()) return;
@@ -1129,6 +1140,14 @@ int main() {
                 statsInfo.decals       = static_cast<int>(effects.decalCount());
                 statsInfo.enemiesAlive = 0;
                 for (const Target& t : combat.targets()) statsInfo.enemiesAlive += t.alive() ? 1 : 0;
+                statsInfo.enemiesAwake  = enemies.activity().awake;
+                statsInfo.enemiesAsleep = enemies.activity().asleep;
+                {
+                    const World::QueryStats q = world.queryStats();
+                    statsInfo.worldQueriesPerSec  = static_cast<int>(q.queries);
+                    statsInfo.worldBlocksPerQuery = q.queries ? static_cast<float>(q.blocksTested) / static_cast<float>(q.queries) : 0.0f;
+                    world.resetQueryStats();
+                }
                 lastTicks = ticks; lastFrames = frames; lastReport = now;
             }
         },
