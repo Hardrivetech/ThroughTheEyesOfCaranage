@@ -171,7 +171,8 @@ TEST_CASE("Menu navigation", "[menu]") {
         (void)menu.update(esc, kAspect);
 
         ui::MenuInput mm;
-        mm.cursor  = {0.0f, -0.18f};
+        // QUIT TO MAIN MENU is the last of the six pause rows.
+        mm.cursor  = {0.0f, ui::itemCenterY(ui::Screen::Pause, 5)};
         mm.clicked = true;
         CHECK(menu.update(mm, kAspect) == ui::MenuAction::MainMenu);
         CHECK(menu.atMainMenu());

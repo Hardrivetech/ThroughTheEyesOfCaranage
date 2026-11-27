@@ -16,6 +16,7 @@
 #include "game/Effects.hpp"
 #include "game/Enemy.hpp"
 #include "game/Hud.hpp"
+#include "game/HudState.hpp"
 #include "game/Interact.hpp"
 #include "game/Level.hpp"
 #include "game/LevelGraph.hpp"
@@ -154,6 +155,8 @@ int main() {
     spawnPickups(level, interact);
 
     PlayerHealth  health;
+    DamageIndicators damageArcs;   // where recent hits came from (drawn around the crosshair)
+    float         heldSeconds = 0.0f;  // how long the current human shield has been held
     TriggerSystem triggers;
     installTriggers(level, triggers);
     PromptSystem  prompts;  // tutorial hints shown by `prompt` triggers
@@ -182,9 +185,22 @@ int main() {
     Progress progress;
     if (const std::string p1 = slotPath(1); saveExists(p1))
         if (const auto d = readSave(p1)) progress.set(d->completedLevels);
+    // What the menus need to know about the save (Continue enabled? which level? hub unlocked?).
+    // Read from disk only when something may have changed.
+    bool              menuInfoStale = true;
+    ui::MenuContext   menuInfo;
     const auto writeSlot = [&](int slot) -> bool {
+        menuInfoStale = true;
         return writeSave(slotPath(slot),
                          captureSave(currentLevelId, checkpoint.current(), health, weapons, current, offhand.get(), progress));
+    };
+    const auto refreshMenuInfo = [&] {
+        if (!menuInfoStale) return;
+        menuInfoStale = false;
+        menuInfo = {};
+        if (const std::string p1 = slotPath(1); saveExists(p1))
+            if (const auto d = readSave(p1)) { menuInfo.canContinue = true; menuInfo.continueDetail = describeSave(*d); }
+        menuInfo.canSelectLevel = progress.hubUnlocked();
     };
 
     // Dev tooling (console, dev menu, perf stats). Not part of gameplay state.
@@ -201,6 +217,8 @@ int main() {
         installTriggers(level, triggers);  // also re-arms every trigger
         prompts.clear();
         health.reset();
+        damageArcs.clear();
+        heldSeconds = 0.0f;
         checkpoint.arrive(arrival);
         deathHandled = levelComplete = false;
         completeTimer = 0.0f;
@@ -268,12 +286,28 @@ int main() {
         if (!d) return std::format("slot {} is damaged (see the log)", slot);
         if (!switchLevel(d->levelId)) return std::format("cannot load level '{}' from slot {}", d->levelId, slot);
         for (const std::string& id : d->completedLevels) progress.complete(id);
+        menuInfoStale = true;
         const SpawnPoint sp = saveSpawn(*d);
         checkpoint.reached(sp.pos, sp.yaw);
         player.respawn(sp.pos);
         camera.face(sp.yaw);
         applyLoadout(*d, health, weapons, current, offhand);
         return {};
+    };
+
+    // Fast checkpoint reload: keeps rooms, doors and cleared sectors, restores vitals and puts the
+    // player at the last checkpoint. Used after dying and by the pause menu when there is no save.
+    const auto reloadCheckpoint = [&] {
+        health.reset();
+        damageArcs.clear();
+        heldSeconds = 0.0f;
+        player.respawn(checkpoint.current().pos);
+        camera = Camera{};
+        camera.face(checkpoint.current().yaw);
+        trauma = TraumaManager{};
+        feel   = CameraFeel{};
+        blind  = Blind{};
+        dmgFlash = 0.0f;
     };
 
     // Starts the briefing `id` (assets/briefings/<id>.brf). Returns false, changing nothing,
@@ -620,6 +654,11 @@ int main() {
                 mi2.held    = input::mouseDown(GLFW_MOUSE_BUTTON_LEFT);
                 mi2.esc     = input::pressed(GLFW_KEY_ESCAPE) && !dev.consoleOpen && !dev.menuOpen;
                 mi2.key     = input::lastKeyPressed();
+                mi2.up      = input::pressedRepeat(GLFW_KEY_UP) || input::pressedRepeat(GLFW_KEY_W);
+                mi2.down    = input::pressedRepeat(GLFW_KEY_DOWN) || input::pressedRepeat(GLFW_KEY_S);
+                mi2.confirm = input::pressed(GLFW_KEY_ENTER) || input::pressed(GLFW_KEY_KP_ENTER) || input::pressed(GLFW_KEY_SPACE);
+                refreshMenuInfo();
+                menu.setContext(menuInfo);
                 const bool wasActive = menu.active();
                 switch (menu.update(mi2, renderer::aspect())) {
                     case ui::MenuAction::Play:  input::setCursorCaptured(true);  break;
@@ -628,6 +667,33 @@ int main() {
                     case ui::MenuAction::MainMenu:
                         input::setCursorCaptured(false);
                         resetToFirstLevel();
+                        break;
+                    case ui::MenuAction::Continue:
+                        if (const std::string err = loadSlot(1); err.empty()) {
+                            input::setCursorCaptured(true);
+                        } else {
+                            log::warn("Continue failed: {}", err);
+                            menu.showMain();
+                        }
+                        break;
+                    case ui::MenuAction::SelectLevel:
+                        if (switchLevel(std::string(kHubLevelId))) input::setCursorCaptured(true);
+                        else                                        menu.showMain();
+                        break;
+                    case ui::MenuAction::LoadCheckpoint:
+                        // The saved checkpoint if there is one, otherwise the one reached this run.
+                        if (const std::string err = loadSlot(1); !err.empty()) {
+                            log::info("No usable save ({}); reloading this run's checkpoint", err);
+                            reloadCheckpoint();
+                        }
+                        input::setCursorCaptured(true);
+                        break;
+                    case ui::MenuAction::SaveCheckpoint:
+                        menu.notify(writeSlot(1) ? "CHECKPOINT SAVED" : "COULD NOT SAVE (SEE THE LOG)");
+                        break;
+                    case ui::MenuAction::RestartLevel:
+                        resetGame();
+                        input::setCursorCaptured(true);
                         break;
                     case ui::MenuAction::None:  break;
                 }
@@ -653,24 +719,15 @@ int main() {
             if (input::pressed(GLFW_KEY_F5))     renderer::reloadShaders();
 
             health.update(fdt);
+            damageArcs.update(fdt);
+            heldSeconds = enemies.heldIndex() >= 0 ? heldSeconds + fdt : 0.0f;
             dmgFlash = std::max(0.0f, dmgFlash - fdt * 1.6f);
             objectiveMsgTime = std::max(0.0f, objectiveMsgTime - fdt);
             const bool alive = !health.dead;
             PromptEvents promptEvents;  // what the player did this tick, for prompts waiting on it
 
             if (health.dead && !deathHandled && health.readyToRespawn()) {
-                // Fast checkpoint reload: keeps rooms, doors and cleared sectors,
-                // restores vitals and puts the player at the last checkpoint.
-                deathHandled = true;
-                health.reset();
-                deathHandled = false;
-                player.respawn(checkpoint.current().pos);
-                camera = Camera{};
-                camera.face(checkpoint.current().yaw);
-                trauma = TraumaManager{};
-                feel   = CameraFeel{};
-                blind  = Blind{};
-                dmgFlash = 0.0f;
+                reloadCheckpoint();
                 say("CHECKPOINT RELOADED");
             }
             if (alive && kPressed(Action::Respawn)) {
@@ -837,6 +894,7 @@ int main() {
                     const glm::vec3 right = camera.orientation({0.0f, 0.0f}) * glm::vec3(1.0f, 0.0f, 0.0f);
                     const float     side  = glm::dot(rel, right) >= 0.0f ? 1.0f : -1.0f;
                     const float     k     = std::clamp(amount / 25.0f, 0.2f, 1.0f);
+                    if (float arc = 0.0f; attackAngle(player.position(), camera.yaw(), from, arc)) damageArcs.add(arc, k);
                     trauma.add(0.25f + 0.5f * k);
                     feel.onDamage(k, side);
                     blind.add(0.08f + 0.2f * k);
@@ -1071,7 +1129,8 @@ int main() {
             sp.flash = blind.sample(a);
             {
                 static const MovementConfig moveCfg{};  // the player runs on the defaults
-                sp.fx = computePostFx(player.horizontalSpeed(), moveCfg.sprintSpeed, moveCfg.maxSpeed, sp.shake);
+                sp.fx = computePostFx(player.horizontalSpeed(), moveCfg.sprintSpeed, moveCfg.maxSpeed, sp.shake,
+                                      health.health, sp.time);
             }
 
             boxes.clear();
@@ -1134,13 +1193,27 @@ int main() {
             overlay.clear();
             if (!menu.active()) {
                 hud.build(weapon, left, effects, proj * view, renderer::aspect(), overlay);
-                if (enemies.heldIndex() >= 0)
-                    Hud::prompt(keyName(menu.settings().keys.key(Action::Grab)), "THROW", renderer::aspect(), overlay);
-                else if (!interact.holding() &&
-                         (interact.canGrab() ||
-                          enemies.findStaggered(player.eyePosition(1.0f),
-                                                camera.orientation({0.0f, 0.0f}) * glm::vec3(0.0f, 0.0f, -1.0f)) >= 0))
-                    Hud::prompt(keyName(menu.settings().keys.key(Action::Grab)), "GRAB", renderer::aspect(), overlay);
+                const std::string_view grabKey = keyName(menu.settings().keys.key(Action::Grab));
+                const bool holdingEnemy = enemies.heldIndex() >= 0;
+                const bool staggeredInReach =
+                    !holdingEnemy && !interact.holding() &&
+                    enemies.findStaggered(player.eyePosition(1.0f),
+                                          camera.orientation({0.0f, 0.0f}) * glm::vec3(0.0f, 0.0f, -1.0f)) >= 0;
+                float shieldHp = 0.0f, shieldMax = 0.0f;
+                if (holdingEnemy)
+                    if (const Target* held = combat.targetAt(enemies.enemies()[static_cast<std::size_t>(enemies.heldIndex())].target)) {
+                        shieldHp  = held->hp;
+                        shieldMax = held->maxHp;
+                    }
+                if (!health.dead) {
+                    Hud::seize(seizeHud(holdingEnemy, staggeredInReach, shieldHp, shieldMax, heldSeconds), grabKey,
+                               renderer::aspect(), overlay);
+                    if (!holdingEnemy && !staggeredInReach && !interact.holding() && interact.canGrab())
+                        Hud::prompt(grabKey, "GRAB", renderer::aspect(), overlay);
+                    Hud::momentum(momentumGauge(player.horizontalSpeed()), renderer::aspect(), overlay);
+                    Hud::damageArcs(damageArcs.arcs(), renderer::aspect(), overlay);
+                    Hud::crosshairWarning(crosshairWarning(health.health, sp.time), renderer::aspect(), overlay);
+                }
                 if (!health.dead && !levelComplete && prompts.active())
                     Hud::tutorial(prompts.text(), prompts.alpha(), renderer::aspect(), overlay);
                 if (!health.dead) {

@@ -1,10 +1,12 @@
 #pragma once
 #include "core/DrawTypes.hpp"
 #include "game/Effects.hpp"
+#include "game/HudState.hpp"
 #include "game/Weapon.hpp"
 
 #include <glm/glm.hpp>
 
+#include <span>
 #include <string_view>
 #include <vector>
 
@@ -29,6 +31,20 @@ public:
     // fade. `damage01` is the recent-hit intensity, `fade` the death fade.
     static void vitals(float health01, float armor01, float damage01, float fade,
                        bool dead, float aspect, std::vector<OverlayRect>& out);
+
+    // Horizontal speed gauge above the health bars: fills towards sprint, with ticks at sprint,
+    // wall-run and the speed-line threshold, and turns crimson in the overdrive tier.
+    static void momentum(const MomentumGauge& g, float aspect, std::vector<OverlayRect>& out);
+
+    // "[F] SEIZE" while a staggered enemy is in reach; while holding one as a shield, its
+    // integrity bar and the "[F] THROW" prompt. `key` is the player's bound grab/throw key.
+    static void seize(const SeizeHud& s, std::string_view key, float aspect, std::vector<OverlayRect>& out);
+
+    // Fading crimson arcs around the crosshair, one per recent attacker direction.
+    static void damageArcs(std::span<const DamageArc> arcs, float aspect, std::vector<OverlayRect>& out);
+
+    // Corner brackets around the crosshair that pulse with the heartbeat below 25 HP.
+    static void crosshairWarning(const CrosshairWarning& w, float aspect, std::vector<OverlayRect>& out);
 
     // Objective line, top centre.
     static void objective(std::string_view text, float aspect, std::vector<OverlayRect>& out);

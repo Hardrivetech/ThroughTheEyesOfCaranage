@@ -20,11 +20,14 @@ constexpr float kKickMax  = 1.5f;
 
 int rowId(float cy) { return static_cast<int>(std::lround(cy * 100.0f)); }
 
+// Palette: crimson #E63946, amber #F4A261, steel #1D2228 on near-black.
 constexpr glm::vec4 kWhite {0.92f, 0.92f, 0.94f, 1.0f};
 constexpr glm::vec4 kGrey  {0.62f, 0.62f, 0.66f, 1.0f};
 constexpr glm::vec4 kDim   {0.40f, 0.40f, 0.44f, 1.0f};
-constexpr glm::vec4 kRed   {0.85f, 0.12f, 0.08f, 1.0f};
-constexpr glm::vec4 kHot   {0.60f, 0.09f, 0.06f, 0.96f};
+constexpr glm::vec4 kRed   {0.902f, 0.224f, 0.275f, 1.0f};   // crimson
+constexpr glm::vec4 kAmber {0.957f, 0.635f, 0.380f, 1.0f};
+constexpr glm::vec4 kSteel {0.114f, 0.133f, 0.157f, 0.94f};
+constexpr glm::vec4 kHot   {0.42f, 0.09f, 0.12f, 0.96f};   // a focused row
 
 // Options layout (NDC). Rows span the panel; sliders live on the right.
 constexpr float kPanelX    = 0.86f;
@@ -40,6 +43,40 @@ constexpr float kFooterY   = -0.80f;
 constexpr int   kBindRowsPerColumn = 9;
 
 } // namespace
+
+std::vector<MenuItem> mainMenuItems(const MenuContext& ctx) {
+    return {
+        {"NEW GAME", "", MenuAction::Play, false, true, false},
+        {"CONTINUE", ctx.canContinue ? ctx.continueDetail : std::string{}, MenuAction::Continue, false, ctx.canContinue, false},
+        {"SELECT LEVEL / HUB", "", MenuAction::SelectLevel, false, ctx.canSelectLevel, false},
+        {"SETTINGS", "", MenuAction::None, true, true, false},
+        {"QUIT GAME", "", MenuAction::Quit, false, true, true},
+    };
+}
+
+std::vector<MenuItem> pauseMenuItems() {
+    return {
+        {"RESUME", "", MenuAction::Play, false, true, false},
+        {"LOAD LAST CHECKPOINT", "", MenuAction::LoadCheckpoint, false, true, false},
+        {"SAVE CHECKPOINT", "", MenuAction::SaveCheckpoint, false, true, false},
+        {"RESTART LEVEL", "", MenuAction::RestartLevel, false, true, false},
+        {"SETTINGS", "", MenuAction::None, true, true, false},
+        {"QUIT TO MAIN MENU", "", MenuAction::MainMenu, false, true, true},
+    };
+}
+
+float itemCenterY(Screen screen, std::size_t index) {
+    const float top = screen == Screen::Pause ? 0.40f : 0.10f;
+    return top - 0.15f * static_cast<float>(index);
+}
+
+std::vector<MenuItem> Menu::items() const {
+    switch (screen_) {
+        case Screen::Main:  return mainMenuItems(ctx_);
+        case Screen::Pause: return pauseMenuItems();
+        default:            return {};
+    }
+}
 
 bool loadSettings(Settings& s, const char* path) {
     std::ifstream f(path);
@@ -217,27 +254,114 @@ void Menu::bindingRow(float cy, std::string_view keys, std::string_view action) 
 
 // --- screens ---------------------------------------------------------------
 
-MenuAction Menu::mainScreen() {
-    textCentered("THROUGH THE EYES OF", 0.0f, 0.66f, 0.0095f, kGrey);
-    textCentered("CARNAGE", 0.0f, 0.46f, 0.030f, kRed);
-
-    if (button("PLAY", 0.10f)) { screen_ = Screen::Playing; return MenuAction::Play; }
-    if (button("OPTIONS", -0.10f)) { back_ = Screen::Main; screen_ = Screen::Options; tab_ = Tab::Gameplay; }
-    if (button("QUIT GAME", -0.30f, true)) return MenuAction::Quit;
-
-    textCentered("WASD MOVE    SPACE JUMP/VAULT    SHIFT SPRINT    C SLIDE", 0.0f, -0.76f, 0.0065f, kGrey);
-    textCentered("LMB ATTACK    RMB LEFT HAND    E GRAB/THROW    1-5 WEAPONS    ALT+2-5 DUAL WIELD",
-                 0.0f, -0.84f, 0.0065f, kGrey);
-    return MenuAction::None;
+// Sharp L-shaped corner brackets around a rectangle.
+void Menu::brackets(glm::vec2 lo, glm::vec2 hi, glm::vec4 color) {
+    const float t = 0.005f, lx = 0.028f / aspect_ * 2.0f, ly = 0.034f;
+    rect({lo.x, hi.y - t}, {lo.x + lx, hi.y}, color);  rect({lo.x, hi.y - ly}, {lo.x + t / aspect_ * 2.0f, hi.y}, color);
+    rect({hi.x - lx, hi.y - t}, {hi.x, hi.y}, color);  rect({hi.x - t / aspect_ * 2.0f, hi.y - ly}, {hi.x, hi.y}, color);
+    rect({lo.x, lo.y}, {lo.x + lx, lo.y + t}, color);  rect({lo.x, lo.y}, {lo.x + t / aspect_ * 2.0f, lo.y + ly}, color);
+    rect({hi.x - lx, lo.y}, {hi.x, lo.y + t}, color);  rect({hi.x - t / aspect_ * 2.0f, lo.y}, {hi.x, lo.y + ly}, color);
 }
 
-MenuAction Menu::pauseScreen() {
-    textCentered("PAUSED", 0.0f, 0.55f, 0.026f, kWhite);
+void Menu::drawItem(const MenuItem& item, float cy, bool focused) {
+    const glm::vec2 half{itemHalfWidth(aspect_), kItemHalfHeight};
+    const glm::vec2 lo{-half.x, cy - half.y}, hi{half.x, cy + half.y};
+    if (!item.enabled) {
+        rect(lo, hi, {0.07f, 0.08f, 0.09f, 0.70f});
+        rect(lo, {lo.x + 0.006f / aspect_ * 2.0f, hi.y}, {0.22f, 0.22f, 0.25f, 1.0f});
+        textCentered(item.label, 0.0f, cy, 0.0105f, kDim);
+        return;
+    }
+    rect(lo, hi, focused ? kHot : (item.danger ? glm::vec4(0.16f, 0.09f, 0.10f, 0.94f) : kSteel));
+    rect(lo, {lo.x + 0.006f / aspect_ * 2.0f, hi.y}, focused ? kAmber : kRed);
+    if (focused) brackets(lo, hi, kAmber);
+    const glm::vec4 text = focused ? kWhite : glm::vec4(0.82f, 0.82f, 0.85f, 1.0f);
+    if (item.detail.empty()) {
+        textCentered(item.label, 0.0f, cy, 0.0105f, text);
+    } else {
+        // A row with a detail (the saved level on CONTINUE): label on the left, detail on the right.
+        textLeft(item.label, lo.x + 0.05f, cy, 0.0105f, text);
+        textRight(item.detail, hi.x - 0.03f, cy, 0.0078f, kAmber);
+    }
+}
 
-    if (button("RESUME", 0.22f)) { screen_ = Screen::Playing; return MenuAction::Play; }
-    if (button("OPTIONS", 0.02f)) { back_ = Screen::Pause; screen_ = Screen::Options; tab_ = Tab::Gameplay; }
-    if (button("MAIN MENU", -0.18f)) { screen_ = Screen::Main; return MenuAction::MainMenu; }
-    if (button("QUIT GAME", -0.38f, true)) return MenuAction::Quit;
+MenuAction Menu::activate(const MenuItem& item) {
+    click_ = true;
+    if (item.opensSettings) {
+        back_   = screen_;
+        screen_ = Screen::Options;
+        tab_    = Tab::Gameplay;
+        return MenuAction::None;
+    }
+    switch (item.action) {
+        case MenuAction::MainMenu:       screen_ = Screen::Main; break;
+        case MenuAction::SaveCheckpoint: break;   // the pause menu stays open
+        case MenuAction::Quit:           break;
+        case MenuAction::None:           break;
+        default:                         screen_ = Screen::Playing; break;   // Play, Continue, SelectLevel, LoadCheckpoint, RestartLevel
+    }
+    return item.action;
+}
+
+// The main and pause menus: a title, a column of rows, mouse and keyboard focus.
+MenuAction Menu::itemScreen() {
+    const bool pause = screen_ == Screen::Pause;
+    if (pause) {
+        textCentered("PAUSED", 0.0f, 0.68f, 0.026f, kWhite);
+        rect({-0.12f / aspect_ * 2.0f, 0.545f}, {0.12f / aspect_ * 2.0f, 0.552f}, kAmber);
+    } else {
+        textCentered("THROUGH THE EYES OF", 0.0f, 0.66f, 0.0095f, kGrey);
+        textCentered("CARNAGE", 0.0f, 0.46f, 0.030f, kRed);
+        rect({-0.30f / aspect_ * 2.0f, 0.335f}, {0.30f / aspect_ * 2.0f, 0.343f}, kAmber);
+        brackets({-0.52f / aspect_ * 2.0f, 0.38f}, {0.52f / aspect_ * 2.0f, 0.75f}, kRed);
+    }
+
+    const std::vector<MenuItem> list = items();
+    const auto enabledAt = [&](std::size_t i) { return list[i].enabled; };
+    const auto firstEnabled = [&]() -> std::size_t {
+        for (std::size_t i = 0; i < list.size(); ++i) if (enabledAt(i)) return i;
+        return 0;
+    };
+    if (focusScreen_ != screen_ || focus_ >= list.size() || !enabledAt(focus_)) {
+        focusScreen_ = screen_;
+        focus_       = firstEnabled();
+    }
+
+    const bool mouseMoved = lastCursor_ != in_.cursor;
+    int hovered = -1;
+    for (std::size_t i = 0; i < list.size(); ++i) {
+        if (hover({0.0f, itemCenterY(screen_, i)}, {itemHalfWidth(aspect_), kItemHalfHeight}) && enabledAt(i))
+            hovered = static_cast<int>(i);
+    }
+    if (hovered >= 0) {
+        if (mouseMoved) focus_ = static_cast<std::size_t>(hovered);
+        hotId_ = 3000 + hovered;
+    }
+
+    // Keyboard: Up/Down move through the enabled rows, wrapping round.
+    const std::size_t n = list.size();
+    const auto step = [&](int dir) {
+        for (std::size_t k = 1; k <= n; ++k) {
+            const std::size_t i = (focus_ + (dir > 0 ? k : n - k)) % n;
+            if (enabledAt(i)) { focus_ = i; return; }
+        }
+    };
+    if (in_.down && !in_.up) { step(+1); hotId_ = 3000 + static_cast<int>(focus_); }
+    if (in_.up && !in_.down) { step(-1); hotId_ = 3000 + static_cast<int>(focus_); }
+
+    for (std::size_t i = 0; i < n; ++i) drawItem(list[i], itemCenterY(screen_, i), i == focus_);
+
+    if (pause) {
+        if (!notice().empty()) textCentered(notice(), 0.0f, -0.55f, 0.0085f, kAmber);
+    } else {
+        textCentered("UP/DOWN + ENTER, OR CLICK", 0.0f, -0.66f, 0.0072f, kDim);
+        textCentered("WASD MOVE    SPACE JUMP/VAULT    SHIFT SPRINT    C SLIDE", 0.0f, -0.76f, 0.0065f, kGrey);
+        textCentered("LMB ATTACK    RMB LEFT HAND    E GRAB/THROW    1-5 WEAPONS    ALT+2-5 DUAL WIELD",
+                     0.0f, -0.84f, 0.0065f, kGrey);
+    }
+
+    if (hovered >= 0 && in_.clicked) return activate(list[static_cast<std::size_t>(hovered)]);
+    if (in_.confirm && n > 0 && enabledAt(focus_)) return activate(list[focus_]);
     return MenuAction::None;
 }
 
@@ -354,7 +478,7 @@ void Menu::tabControls() {
 
 void Menu::optionsScreen() {
     // Header.
-    textLeft("OPTIONS", -kPanelX, 0.88f, 0.026f, kWhite);
+    textLeft("SETTINGS", -kPanelX, 0.88f, 0.026f, kWhite);
     rect({-kPanelX, 0.795f}, {kPanelX, 0.80f}, {0.55f, 0.08f, 0.05f, 0.9f});
 
     // Tabs.
@@ -412,14 +536,16 @@ MenuAction Menu::update(const MenuInput& in, float aspect) {
     rect({-1.0f, -1.0f}, {1.0f, 1.0f}, {0.015f, 0.015f, 0.02f, dim});
 
     MenuAction act = MenuAction::None;
+    if (noticeTicks_ > 0) --noticeTicks_;
     switch (screen_) {
-        case Screen::Main:    act = mainScreen(); break;
-        case Screen::Pause:   act = pauseScreen(); break;
+        case Screen::Main:
+        case Screen::Pause:   act = itemScreen(); break;
         case Screen::Options: optionsScreen(); break;
         case Screen::Playing: break;
     }
     hoverChanged_ = hotId_ != -1 && hotId_ != prevHotId_;
     prevHotId_    = hotId_;
+    lastCursor_   = in.cursor;
 
     // Escape: close options, or resume from pause.
     if (in.esc && act == MenuAction::None && !wasCapturing) {

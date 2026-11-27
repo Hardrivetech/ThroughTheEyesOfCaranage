@@ -11,6 +11,13 @@ namespace carnage {
 
 namespace {
 
+// Palette: crimson #E63946, amber #F4A261, steel #1D2228.
+constexpr glm::vec4 kCrimson{0.902f, 0.224f, 0.275f, 1.0f};
+constexpr glm::vec4 kAmber{0.957f, 0.635f, 0.380f, 1.0f};
+constexpr glm::vec4 kSteel{0.114f, 0.133f, 0.157f, 1.0f};
+
+glm::vec4 withAlpha(glm::vec4 c, float a) { c.a = a; return c; }
+
 // Rect centred at `c` (NDC) with half-extents given in NDC-height units, so
 // squares stay square on any aspect ratio.
 OverlayRect rect(glm::vec2 c, glm::vec2 halfH, float aspect, glm::vec4 color) {
@@ -138,6 +145,121 @@ void Hud::vitals(float health01, float armor01, float damage01, float fade, bool
             ui::drawText(out, text, {-tw * 0.5f, 0.0f}, px, aspect, {0.9f, 0.1f, 0.08f, (fade - 0.6f) / 0.4f});
         }
     }
+}
+
+namespace {
+
+// Sharp L-shaped brackets at the four corners of [lo, hi] (NDC).
+void bracketCorners(glm::vec2 lo, glm::vec2 hi, float aspect, glm::vec4 c, std::vector<OverlayRect>& out) {
+    const float t = 0.0035f, lx = 0.014f / aspect * 2.0f, ly = 0.020f, tx = t / aspect * 2.0f;
+    out.push_back({{lo.x, hi.y - t}, {lo.x + lx, hi.y}, c});  out.push_back({{lo.x, hi.y - ly}, {lo.x + tx, hi.y}, c});
+    out.push_back({{hi.x - lx, hi.y - t}, {hi.x, hi.y}, c});  out.push_back({{hi.x - tx, hi.y - ly}, {hi.x, hi.y}, c});
+    out.push_back({{lo.x, lo.y}, {lo.x + lx, lo.y + t}, c});  out.push_back({{lo.x, lo.y}, {lo.x + tx, lo.y + ly}, c});
+    out.push_back({{hi.x - lx, lo.y}, {hi.x, lo.y + t}, c});  out.push_back({{hi.x - tx, lo.y}, {hi.x, lo.y + ly}, c});
+}
+
+void centredText(std::string_view text, float y, float px, float aspect, glm::vec4 c, std::vector<OverlayRect>& out) {
+    const float w = ui::textWidth(text, px, aspect);
+    ui::drawText(out, text, {-w * 0.5f + 0.0015f / aspect, y - 0.0015f}, px, aspect, {0, 0, 0, 0.55f * c.a});
+    ui::drawText(out, text, {-w * 0.5f, y}, px, aspect, c);
+}
+
+} // namespace
+
+void Hud::momentum(const MomentumGauge& g, float aspect, std::vector<OverlayRect>& out) {
+    const float w = 0.40f / aspect * 2.0f, y0 = -0.845f, h = 0.016f;
+    const float x0 = -w * 0.5f;
+    const auto at = [&](float m) { return x0 + w * std::clamp(m, 0.0f, 1.0f); };
+
+    out.push_back({{x0, y0}, {x0 + w, y0 + h}, withAlpha(kSteel, 0.85f)});
+
+    glm::vec4 fill = withAlpha(kAmber, 0.55f);                       // building up
+    if (g.tier == MomentumTier::Sprint)    fill = withAlpha(kAmber, 0.95f);
+    if (g.tier == MomentumTier::Overdrive) fill = withAlpha(kCrimson, 0.98f);
+    if (g.fill > 0.0f) out.push_back({{x0, y0}, {at(g.fill), y0 + h}, fill});
+
+    // Ticks: sprint (amber, tall), wall-run (white, short), speed-line threshold (crimson, tall).
+    const float tw = 0.0016f / aspect * 2.0f;
+    out.push_back({{at(g.sprintMark) - tw, y0 - 0.006f}, {at(g.sprintMark) + tw, y0 + h + 0.006f}, kAmber});
+    out.push_back({{at(g.wallRunMark) - tw, y0 + h}, {at(g.wallRunMark) + tw, y0 + h + 0.006f}, {0.92f, 0.92f, 0.94f, 0.9f}});
+    out.push_back({{at(g.overdriveMark) - tw, y0 - 0.006f}, {at(g.overdriveMark) + tw, y0 + h + 0.006f}, kCrimson});
+
+    bracketCorners({x0 - 0.006f / aspect * 2.0f, y0 - 0.008f}, {x0 + w + 0.006f / aspect * 2.0f, y0 + h + 0.008f}, aspect,
+                   withAlpha(kAmber, 0.8f), out);
+
+    const char* label = "";
+    switch (g.tier) {
+        case MomentumTier::Sprint:    label = "SPRINT"; break;
+        case MomentumTier::Overdrive: label = "OVERDRIVE"; break;
+        default: break;
+    }
+    if (*label) {
+        constexpr float px = 0.0045f;
+        const float tw2 = ui::textWidth(label, px, aspect);
+        ui::drawText(out, label, {x0 + w - tw2, y0 + h + 0.050f}, px, aspect,
+                     g.tier == MomentumTier::Overdrive ? kCrimson : kAmber);
+    }
+}
+
+void Hud::seize(const SeizeHud& s, std::string_view key, float aspect, std::vector<OverlayRect>& out) {
+    if (s.state == SeizeState::None) return;
+    const std::string keyText = "[" + std::string(key) + "] ";
+
+    if (s.state == SeizeState::CanSeize) {
+        const std::string text = keyText + "SEIZE";
+        constexpr float px = 0.0075f;
+        const float w = ui::textWidth(text, px, aspect);
+        bracketCorners({-w * 0.5f - 0.03f / aspect, -0.335f}, {w * 0.5f + 0.03f / aspect, -0.27f}, aspect, withAlpha(kAmber, 0.9f), out);
+        centredText(text, -0.30f, px, aspect, withAlpha(kAmber, 0.98f), out);
+        return;
+    }
+
+    // Holding a human shield: integrity bar, then the throw prompt.
+    const float w = 0.22f / aspect * 2.0f, y = -0.335f, h = 0.014f;
+    const glm::vec4 bar = s.shieldWeak ? kCrimson : kAmber;
+    centredText("HUMAN SHIELD", y + 0.062f, 0.0050f, aspect, withAlpha(bar, 0.95f), out);
+    out.push_back({{-w * 0.5f, y}, {w * 0.5f, y + h}, withAlpha(kSteel, 0.9f)});
+    if (s.shield01 > 0.0f) out.push_back({{-w * 0.5f, y}, {-w * 0.5f + w * s.shield01, y + h}, withAlpha(bar, 0.95f)});
+    bracketCorners({-w * 0.5f - 0.005f / aspect * 2.0f, y - 0.007f}, {w * 0.5f + 0.005f / aspect * 2.0f, y + h + 0.007f}, aspect,
+                   withAlpha(bar, 0.85f), out);
+
+    const std::string text = keyText + "THROW";
+    centredText(text, y - 0.040f, 0.0072f, aspect, {1.0f, 1.0f, 1.0f, 0.95f}, out);
+
+    // The ready pip fills over the first moments of the hold, then shows READY (or BREAKING).
+    const float pw = 0.07f / aspect * 2.0f, py = y - 0.125f, ph = 0.012f;
+    const char* state = !s.throwReady ? "NO SHIELD" : (s.grip01 < 1.0f ? "GRIP" : (s.shieldWeak ? "BREAKING" : "READY"));
+    out.push_back({{-pw * 0.5f, py}, {pw * 0.5f, py + ph}, withAlpha(kSteel, 0.9f)});
+    out.push_back({{-pw * 0.5f, py}, {-pw * 0.5f + pw * s.grip01, py + ph}, withAlpha(s.shieldWeak ? kCrimson : kAmber, 0.95f)});
+    centredText(state, py - 0.012f, 0.0050f, aspect, withAlpha(s.shieldWeak ? kCrimson : kAmber, 0.9f), out);
+}
+
+void Hud::damageArcs(std::span<const DamageArc> arcs, float aspect, std::vector<OverlayRect>& out) {
+    constexpr float kRadius = 0.20f, kSpread = 0.34f;
+    constexpr int   kDots = 9;
+    for (const DamageArc& a : arcs) {
+        const float alpha = DamageIndicators::alpha(a);
+        if (alpha <= 0.0f) continue;
+        for (int i = 0; i < kDots; ++i) {
+            const float t = static_cast<float>(i) / static_cast<float>(kDots - 1) * 2.0f - 1.0f;   // -1..1 across the arc
+            const float ang = a.angle + t * kSpread;
+            const float edge = 1.0f - 0.55f * std::abs(t);                                          // brighter in the middle
+            for (const float r : {kRadius, kRadius + 0.013f}) {
+                out.push_back(rect({std::sin(ang) * r / aspect, std::cos(ang) * r}, {0.0042f, 0.0042f}, aspect,
+                                   withAlpha(kCrimson, std::min(1.0f, alpha * edge))));
+            }
+        }
+        // A bright pointer just outside the arc's middle.
+        const float pr = kRadius + 0.035f;
+        out.push_back(rect({std::sin(a.angle) * pr / aspect, std::cos(a.angle) * pr}, {0.0065f, 0.0065f}, aspect,
+                           withAlpha({1.0f, 0.55f, 0.55f, 1.0f}, alpha)));
+    }
+}
+
+void Hud::crosshairWarning(const CrosshairWarning& w, float aspect, std::vector<OverlayRect>& out) {
+    if (!w.active) return;
+    const float r = 0.052f + 0.012f * w.pulse;   // the brackets breathe with the heartbeat
+    bracketCorners({-r / aspect, -r}, {r / aspect, r}, aspect, withAlpha(kCrimson, 0.45f + 0.5f * w.pulse), out);
 }
 
 void Hud::objective(std::string_view text, float aspect, std::vector<OverlayRect>& out) {
