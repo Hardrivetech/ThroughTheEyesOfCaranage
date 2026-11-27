@@ -22,6 +22,7 @@
 #include "game/Lights.hpp"
 #include "game/Movement.hpp"
 #include "game/PlayerHealth.hpp"
+#include "game/SaveSystem.hpp"
 #include "game/Triggers.hpp"
 #include "game/Trauma.hpp"
 #include "game/Viewmodel.hpp"
@@ -144,8 +145,7 @@ int main() {
     Enemies enemies;
     spawnEnemies(level, enemies, combat);
 
-    std::array<std::unique_ptr<Weapon>, 5> weapons{
-        makeFists(), makePistol(), makeSmg(), makeShotgun(), makeRocketLauncher()};
+    WeaponSet weapons{makeFists(), makePistol(), makeSmg(), makeShotgun(), makeRocketLauncher()};
     std::size_t current = 0;  // start with Fists!
     weapons[current]->equip();
     std::unique_ptr<Weapon> offhand;  // optional left-hand weapon (dual wield)
@@ -175,6 +175,17 @@ int main() {
     const auto  say = [&](const char* m) { objectiveMsg = m; objectiveMsgTime = 3.5f; };
     float       completeTimer = 0.0f;  // seconds since the level was completed
     constexpr float kCompleteFadeStart = 1.5f, kCompleteFadeEnd = 3.5f;
+
+    // ---- checkpoint and mission-progress saves (src/game/SaveSystem) ----------------------
+    // A save is the last checkpoint, the loadout and the finished missions; it is written on every
+    // checkpoint, portal and level completion, and by the `save` command.
+    Progress progress;
+    if (const std::string p1 = slotPath(1); saveExists(p1))
+        if (const auto d = readSave(p1)) progress.set(d->completedLevels);
+    const auto writeSlot = [&](int slot) -> bool {
+        return writeSave(slotPath(slot),
+                         captureSave(currentLevelId, checkpoint.current(), health, weapons, current, offhand.get(), progress));
+    };
 
     // Dev tooling (console, dev menu, perf stats). Not part of gameplay state.
     dev::DevState     dev;
@@ -246,6 +257,25 @@ int main() {
         resetGame();
     };
 
+    // Loads slot `slot`: rebuilds the saved level and puts the player at the saved checkpoint with the
+    // saved loadout. Returns "" on success, otherwise why not (the running game is left as it was
+    // whenever the save itself is unusable).
+    const auto loadSlot = [&](int slot) -> std::string {
+        const std::string path = slotPath(slot);
+        if (path.empty()) return std::format("slot must be 1-{}", kSaveSlots);
+        if (!saveExists(path)) return std::format("no save in slot {}", slot);
+        const auto d = readSave(path);
+        if (!d) return std::format("slot {} is damaged (see the log)", slot);
+        if (!switchLevel(d->levelId)) return std::format("cannot load level '{}' from slot {}", d->levelId, slot);
+        for (const std::string& id : d->completedLevels) progress.complete(id);
+        const SpawnPoint sp = saveSpawn(*d);
+        checkpoint.reached(sp.pos, sp.yaw);
+        player.respawn(sp.pos);
+        camera.face(sp.yaw);
+        applyLoadout(*d, health, weapons, current, offhand);
+        return {};
+    };
+
     // Starts the briefing `id` (assets/briefings/<id>.brf). Returns false, changing nothing,
     // if it cannot be read or has no beats; the caller then skips straight to the destination.
     const auto startBriefing = [&](const std::string& id) -> bool {
@@ -265,7 +295,7 @@ int main() {
         briefing.reset();
         if (briefingResume) { briefingResume = false; return; }
         if (afterBriefing.type == TransitionType::Level) {
-            if (switchLevel(afterBriefing.next, afterBriefing.spawn)) return;
+            if (switchLevel(afterBriefing.next, afterBriefing.spawn)) { (void)writeSlot(1); return; }
             log::error("cannot load next level '{}'; returning to the menu", afterBriefing.next);
         }
         menu.showMain();
@@ -309,13 +339,12 @@ int main() {
             else b = !b;
             return std::string(b ? "on" : "off");
         };
-        static constexpr std::array<std::string_view, 5> kWeaponNames{
-            "fists", "pistol", "smg", "shotgun", "rocket"};
-        const auto weaponIndex = [](std::string_view n) -> int {
+        // A weapon from a console argument: a slot number 1-5, or the start of a weapon id.
+        const auto weaponArg = [](std::string_view n) -> int {
             if (const auto v = dev::parseInt(n)) return (*v >= 1 && *v <= 5) ? *v - 1 : -1;
             const std::string l = dev::toLower(n);
-            for (std::size_t i = 0; i < kWeaponNames.size(); ++i)
-                if (kWeaponNames[i].rfind(l, 0) == 0) return static_cast<int>(i);
+            for (std::size_t i = 0; i < kWeaponIds.size(); ++i)
+                if (kWeaponIds[i].rfind(l, 0) == 0) return static_cast<int>(i);
             return -1;
         };
 
@@ -345,17 +374,17 @@ int main() {
         });
         console.add("give", "give <fists|pistol|smg|shotgun|rocket|1-5> [left]", [&](Args a) -> CmdResult {
             if (a.empty()) return std::unexpected("usage: give <weapon> [left]");
-            const int i = weaponIndex(a[0]);
+            const int i = weaponArg(a[0]);
             if (i < 0) return std::unexpected("unknown weapon: " + a[0]);
             const auto idx = static_cast<std::size_t>(i);
             if (a.size() > 1 && dev::toLower(a[1]) == "left") {
                 if (i == 0) offhand.reset();
                 else { offhand = makeWeapon(idx); offhand->equip(); }
-                return std::string("left hand: ") + std::string(kWeaponNames[idx]);
+                return std::string("left hand: ") + std::string(kWeaponIds[idx]);
             }
             current = idx;
             weapons[current]->equip();
-            return std::string("equipped ") + std::string(kWeaponNames[idx]);
+            return std::string("equipped ") + std::string(kWeaponIds[idx]);
         });
         console.add("stagger_all", "stagger every live enemy (seizable)", [&](Args) -> CmdResult {
             int n = 0;
@@ -446,6 +475,24 @@ int main() {
         console.add("win", "trigger the level-complete transition", [&](Args) -> CmdResult {
             if (!levelComplete) { levelComplete = true; completeTimer = 0.0f; }
             return std::string("level complete");
+        });
+        console.add("save", "save [slot 1-9] - save the checkpoint, loadout and progress", [&](Args a) -> CmdResult {
+            const int slot = a.empty() ? 1 : dev::parseInt(a[0]).value_or(0);
+            if (!validSlot(slot)) return std::unexpected(std::format("usage: save [slot 1-{}]", kSaveSlots));
+            if (!writeSlot(slot)) return std::unexpected("could not write " + slotPath(slot) + " (see the log)");
+            const glm::vec3 c = checkpoint.current().pos;
+            return std::format("saved {} ({} at {:.1f} {:.1f} {:.1f})", slotPath(slot), currentLevelId, c.x, c.y, c.z);
+        });
+        console.add("load", "load [slot 1-9] - load a save (rebuilds the level at its checkpoint)", [&](Args a) -> CmdResult {
+            const int slot = a.empty() ? 1 : dev::parseInt(a[0]).value_or(0);
+            if (!validSlot(slot)) return std::unexpected(std::format("usage: load [slot 1-{}]", kSaveSlots));
+            if (const std::string err = loadSlot(slot); !err.empty()) return std::unexpected(err);
+            return std::format("loaded slot {} ({})", slot, currentLevelId);
+        });
+        console.add("progress", "list the missions completed so far", [&](Args) -> CmdResult {
+            std::string out = progress.ids().empty() ? "no missions completed" : "completed:";
+            for (const std::string& id : progress.ids()) out += " " + id;
+            return out + (progress.hubUnlocked() ? " | hub unlocked" : " | hub locked");
         });
         console.add("set_fov", "set_fov <50-130>", [&](Args a) -> CmdResult {
             const auto v = a.empty() ? std::nullopt : dev::parseFloat(a[0]);
@@ -869,7 +916,7 @@ int main() {
                         break;
                     case TriggerAction::Checkpoint:
                         checkpoint.reached(te.point, camera.yaw());
-                        say("CHECKPOINT");
+                        say(writeSlot(1) ? "CHECKPOINT SAVED" : "CHECKPOINT");
                         break;
                     case TriggerAction::Complete:
                         if (!levelComplete) completeTimer = 0.0f;
@@ -888,6 +935,7 @@ int main() {
                 // A mission gate: leave this level for another, arriving at the gate's spawn.
                 const std::string targetId = portal->first;
                 if (switchLevel(targetId, portal->second)) {
+                    (void)writeSlot(1);  // entering a level is a save point
                     audio::play(audio::Sfx::Pickup, 0.8f, 0.0f, 0.6f);
                     std::string title = currentLevelId;
                     std::transform(title.begin(), title.end(), title.begin(),
@@ -906,6 +954,11 @@ int main() {
                 // level, or (the default, or if that fails) back to the main menu.
                 if (completeTimer >= kCompleteFadeEnd) {
                     const LevelTransition next = completionTransition(level);
+                    // Record the mission as finished before anything else can go wrong. Until the next
+                    // level is entered (below, or after its briefing) the save still points at this
+                    // level's last checkpoint, so quitting during a briefing loses nothing.
+                    progress.complete(currentLevelId);
+                    (void)writeSlot(1);
                     if (!next.briefing.empty()) {
                         afterBriefing  = next;
                         briefingResume = false;
@@ -918,6 +971,7 @@ int main() {
                     }
                     if (next.type == TransitionType::Level) {
                         if (switchLevel(next.next, next.spawn)) {
+                            (void)writeSlot(1);
                             input::endTick();
                             ++ticks;
                             return;

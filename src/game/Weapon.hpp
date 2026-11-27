@@ -6,6 +6,8 @@
 #include <glm/glm.hpp>
 #include <glm/trigonometric.hpp>
 
+#include <algorithm>
+
 namespace carnage {
 
 struct WeaponStats {
@@ -84,6 +86,8 @@ public:
 
     void equip();
     void refill() { ammo_ = stats_.magSize; reloading_ = false; reloadLeft_ = 0.0f; }  // dev
+    // Puts `rounds` (clamped to 0..magSize) in the magazine and cancels any reload (a loaded save).
+    void setAmmo(int rounds) { ammo_ = std::clamp(rounds, 0, stats_.magSize); reloading_ = false; reloadLeft_ = 0.0f; }
 
     const WeaponStats& stats() const { return stats_; }
     int         ammo() const { return ammo_; }

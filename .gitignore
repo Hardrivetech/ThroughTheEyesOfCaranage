@@ -44,3 +44,6 @@ desktop.ini
 *.obj
 *.pdb
 *.ilk
+
+# Player saves
+/saves/
