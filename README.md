@@ -38,14 +38,38 @@
 src/
 ├── core/         # Fixed-timestep loop, renderer, input, spatial audio, memory, logging
 ├── dev/          # Header-only command console, DevState and dev UI overlays
-├── game/         # Movement, camera feel, weapons, combat, enemy AI, interaction, triggers, world
+├── game/         # Movement, camera feel, weapons, combat, enemy AI, interaction, triggers, world, level loader
 ├── gfx/          # Meshes, shaders, humanoid model, particle system and decals
 └── ui/           # Menus and text rendering
-assets/           # Shaders, meshes and audio
+assets/           # Shaders, meshes, audio and levels (assets/levels/*.lvl)
 third_party/      # Vendored single-header libraries (stb_image, miniaudio)
 tests/            # Catch2 unit tests
 CMakeLists.txt    # CMake configuration
 ```
+
+---
+
+## Level Files
+
+Levels are plain-text `.lvl` files in `assets/levels/`, one record per line, so they can be edited without touching C++. The shipped level is `assets/levels/level01_escape.lvl` (three sectors: corridor, arena and pit).
+
+```text
+# record key=value key=value ...      (vectors are comma-separated, '#' starts a comment)
+level   name=level01_escape
+spawn   pos=0,0,10
+block   min=-6,-75 max=6,15 top=0 material=tile color=0.38,0.38,0.36
+block   min=10,-100 max=14,-84 h0=3.5 h1=0 axis=z          # a ramp
+block   min=-3,-76 max=3,-75 top=4.8 visible=0 door=0      # a door
+light   pos=0,4.4,-5 color=9,7.4,5.4 radius=16
+target  pos=0,0,2 patrol=2
+enemy   pos=0,0,-6 type=melee sector=0
+pickup  kind=pipe pos=1.6,0.06,4 yaw=0.4
+trigger when=sector_cleared sector=0 do=open_door door=0
+trigger when=enter min=-16,-1,-92 max=16,6,-77 do=checkpoint point=0,0,-80
+trigger when=sector_cleared sector=2 do=complete
+```
+
+The loader (`src/game/Level.hpp`) never aborts on a bad line: it skips the line, logs `file:line: message`, and keeps loading. It also rejects typo'd keys, and drops triggers that could never work (a door id that doesn't exist, or a sector with no enemies). See the header for the full record reference.
 
 ---
 

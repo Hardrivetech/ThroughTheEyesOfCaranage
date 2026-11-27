@@ -7,6 +7,7 @@
 #include <glm/gtc/quaternion.hpp>
 
 #include <optional>
+#include <span>
 #include <vector>
 
 namespace carnage {
@@ -67,6 +68,8 @@ public:
 
     InteractEvents tick(float dt, const InteractInput& in, const InteractContext& ctx,
                         Combat& combat, const World& world);
+
+    std::span<const Pickup> pickups() const { return pickups_; }
 
     bool holding() const { return held_.has_value(); }
     bool canGrab() const { return canGrab_; }

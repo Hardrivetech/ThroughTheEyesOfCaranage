@@ -54,6 +54,7 @@ add_executable(Carnage
     src/game/Hud.cpp
     src/game/Viewmodel.cpp
     src/game/Interact.cpp
+    src/game/Level.cpp
     src/game/Enemy.cpp
     src/ui/Text.cpp
     src/ui/Menu.cpp
@@ -94,15 +95,19 @@ if(CARNAGE_BUILD_TESTS)
         tests/test_world.cpp
         tests/test_movement.cpp
         tests/test_combat.cpp
+        tests/test_level.cpp
         src/game/World.cpp
         src/game/Movement.cpp
         src/game/Combat.cpp
         src/game/Weapon.cpp
         src/game/Weapons.cpp
+        src/game/Interact.cpp
+        src/game/Level.cpp
         src/game/Enemy.cpp
         src/ui/Menu.cpp
         src/ui/Text.cpp)
     target_include_directories(CarnageTests PRIVATE src)
+    target_compile_definitions(CarnageTests PRIVATE CARNAGE_ASSET_DIR="${CMAKE_SOURCE_DIR}/assets")
     target_link_libraries(CarnageTests PRIVATE glm::glm Catch2::Catch2WithMain)
     if(NOT MSVC)
         target_compile_options(CarnageTests PRIVATE -Wall -Wextra -Wpedantic)

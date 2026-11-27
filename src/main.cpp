@@ -16,6 +16,7 @@
 #include "game/Enemy.hpp"
 #include "game/Hud.hpp"
 #include "game/Interact.hpp"
+#include "game/Level.hpp"
 #include "game/Movement.hpp"
 #include "game/PlayerHealth.hpp"
 #include "game/Triggers.hpp"
@@ -68,7 +69,7 @@ constexpr std::array<Subsystem, 5> kSubsystems{{
 
 namespace {
 
-constexpr glm::vec3 kSpawn{0.0f, 0.0f, 10.0f};
+constexpr const char* kLevelPath = CARNAGE_ASSET_DIR "/levels/level01_escape.lvl";
 
 audio::Sfx fireSound(const char* name) {
     const std::string_view n{name};
@@ -79,67 +80,17 @@ audio::Sfx fireSound(const char* name) {
     return audio::Sfx::Pistol;
 }
 
-void populateTargets(Combat& combat) {
-    combat.addTarget(Target::dummy({ 0.0f, 0.0f,   2.0f}, 2.0f));  // corridor entry patrol
-    combat.addTarget(Target::dummy({-1.8f, 0.0f, -10.0f}));       // near cover crate
-    combat.addTarget(Target::dummy({ 1.8f, 0.0f, -22.0f}, 1.5f));
-    combat.addTarget(Target::dummy({ 0.0f, 0.0f, -32.0f}, 2.5f));  // wall-run sector
-    combat.addTarget(Target::dummy({-1.5f, 0.0f, -42.0f}));
-    combat.addTarget(Target::dummy({-1.1f, 2.2f, -54.0f}));        // upper catwalk
-    combat.addTarget(Target::dummy({ 1.8f, 1.2f, -60.0f}));       // far platform
-    combat.addTarget(Target::dummy({ 0.0f, 0.0f, -70.0f}, 2.0f));  // end corridor boss dummy
-}
-
-void populatePickups(Interact& interact) {
-    interact.add(PickupKind::Pipe,   { 1.6f, 0.06f,   4.0f}, 0.4f);
-    interact.add(PickupKind::Bat,    {-2.2f, 0.06f,  -8.0f}, 1.2f);
-    interact.add(PickupKind::Barrel, { 2.3f, 0.45f, -18.0f});
-    interact.add(PickupKind::Pipe,   {-2.0f, 0.06f, -26.0f}, 2.0f);
-    interact.add(PickupKind::Barrel, {-2.3f, 0.45f, -37.0f});
-    interact.add(PickupKind::Bat,    { 1.4f, 0.06f, -47.0f}, 0.2f);
-}
-
-void populateEnemies(Enemies& enemies, Combat& combat) {
-    // Sector 0: the corridor. Clearing it opens door 0.
-    enemies.add(combat, { 0.0f, 0.0f,  -6.0f}, EnemyType::Melee,  0);
-    enemies.add(combat, { 1.0f, 0.0f, -20.0f}, EnemyType::Melee,  0);
-    enemies.add(combat, {-1.0f, 0.0f, -34.0f}, EnemyType::Ranged, 0);
-    enemies.add(combat, { 0.0f, 0.0f, -68.0f}, EnemyType::Ranged, 0);
-    // Sector 1: the arena. Clearing it opens the gate (door 1).
-    enemies.add(combat, { 0.0f, 0.0f, -100.0f}, EnemyType::Melee,  1);
-    enemies.add(combat, {-8.0f, 0.0f, -105.0f}, EnemyType::Ranged, 1);
-    enemies.add(combat, { 8.0f, 0.0f, -115.0f}, EnemyType::Ranged, 1);
-    enemies.add(combat, { 5.0f, 0.0f, -120.0f}, EnemyType::Melee,  1);
-    // Sector 2: the pit. Clearing it completes the level.
-    enemies.add(combat, { 0.0f, -6.0f, -145.0f}, EnemyType::Melee,  2);
-    enemies.add(combat, { 6.0f, -6.0f, -152.0f}, EnemyType::Melee,  2);
-    enemies.add(combat, {-8.0f, -6.0f, -165.0f}, EnemyType::Ranged, 2);
-}
-
-void populateTriggers(TriggerSystem& t) {
-    t.clear();
-    TriggerVolume v;
-    v.condition = TriggerCondition::SectorCleared;
-    v.action = TriggerAction::OpenDoor;  v.sector = 0; v.param = 0; t.add(v);
-    v.action = TriggerAction::OpenDoor;  v.sector = 1; v.param = 1; t.add(v);
-    v.action = TriggerAction::Complete;  v.sector = 2; v.param = 0; t.add(v);
-
-    TriggerVolume cp;
-    cp.condition = TriggerCondition::PlayerEnters;
-    cp.action    = TriggerAction::Checkpoint;
-    cp.min = {-16.0f, -1.0f, -92.0f}; cp.max = {16.0f, 6.0f, -77.0f}; cp.point = {0.0f, 0.0f, -80.0f};
-    t.add(cp);
-    cp.min = {-4.0f, -1.0f, -136.0f}; cp.max = {14.0f, 2.0f, -131.0f}; cp.point = {5.0f, 0.0f, -133.0f};
-    t.add(cp);
-}
-
 } // namespace
 
 int main() {
     SubsystemManager subsystems{kSubsystems};
     if (!subsystems.initAll()) return EXIT_FAILURE;
 
-    World world = World::testLevel();  // mutable: doors open at runtime
+    LevelLoad loaded = loadLevelFile(kLevelPath);
+    for (const LevelIssue& i : loaded.issues) log::warn("{}:{}: {}", kLevelPath, i.line, i.message);
+    if (!loaded.opened) return EXIT_FAILURE;
+    const LevelData& level = loaded.level;
+    World& world = loaded.level.world;  // mutable: doors open at runtime
     if (!renderer::uploadWorld(world)) return EXIT_FAILURE;
 
     // Props: render-only meshes sitting on the collision-only pillar blocks.
@@ -176,9 +127,9 @@ int main() {
     Effects effects;
     Hud     hud;
     Rng     gameplayRng;
-    populateTargets(combat);
+    spawnTargets(level, combat);
     Enemies enemies;
-    populateEnemies(enemies, combat);
+    spawnEnemies(level, enemies, combat);
 
     std::array<std::unique_ptr<Weapon>, 5> weapons{
         makeFists(), makePistol(), makeSmg(), makeShotgun(), makeRocketLauncher()};
@@ -187,12 +138,12 @@ int main() {
     std::unique_ptr<Weapon> offhand;  // optional left-hand weapon (dual wield)
     Blind blind;
     Interact interact;
-    populatePickups(interact);
+    spawnPickups(level, interact);
 
     PlayerHealth  health;
     TriggerSystem triggers;
-    populateTriggers(triggers);
-    glm::vec3   checkpoint = kSpawn;
+    installTriggers(level, triggers);
+    glm::vec3   checkpoint = level.spawn;
     bool        deathHandled = false;
     bool        levelComplete = false;
     float       dmgFlash = 0.0f;
@@ -210,29 +161,29 @@ int main() {
     Clock::time_point lastFrameStart = Clock::now();
 
     // Unloads the running session and rebuilds a pristine level. Shares the
-    // populate* helpers with startup so the two paths cannot diverge.
+    // spawn* helpers with startup so the two paths cannot diverge.
     const auto resetGame = [&] {
         world.resetDoors();
         triggers.reset();
         health.reset();
-        checkpoint = kSpawn;
+        checkpoint = level.spawn;
         deathHandled = levelComplete = false;
         completeTimer = 0.0f;
         dmgFlash = 0.0f;
         objectiveMsg.clear();
         objectiveMsgTime = 0.0f;
         combat.clear();
-        populateTargets(combat);
+        spawnTargets(level, combat);
         enemies.clear();
-        populateEnemies(enemies, combat);
+        spawnEnemies(level, enemies, combat);
         interact = Interact{};
-        populatePickups(interact);
+        spawnPickups(level, interact);
         effects = Effects{};
         trauma  = TraumaManager{};
         feel    = CameraFeel{};
         blind   = Blind{};
         camera  = Camera{};
-        player.respawn(kSpawn);
+        player.respawn(level.spawn);
         lastState = player.state();
         weapons = {makeFists(), makePistol(), makeSmg(), makeShotgun(), makeRocketLauncher()};
         current = 0;

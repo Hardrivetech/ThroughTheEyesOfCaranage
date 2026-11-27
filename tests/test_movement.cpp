@@ -2,6 +2,7 @@
 #include <catch2/catch_approx.hpp>
 
 #include "core/GameLoop.hpp"
+#include "game/Level.hpp"
 #include "game/Movement.hpp"
 #include "test_helpers.hpp"
 
@@ -10,6 +11,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <string>
 #include <thread>
 
 using namespace carnage;
@@ -575,7 +577,10 @@ TEST_CASE("Jumping under a low overhead slab bonks instead of shoving sideways",
 }
 
 TEST_CASE("Movement is deterministic for identical input", "[movement][determinism]") {
-    const World level = World::testLevel();
+    // The shipped level: ramps, walls, stairs, doors and vault hurdles.
+    const LevelLoad loaded = loadLevelFile(std::string(CARNAGE_ASSET_DIR) + "/levels/level01_escape.lvl");
+    REQUIRE(loaded.clean());
+    const World& level = loaded.level.world;
 
     // A scripted, mildly chaotic input pattern: no RNG, purely tick-indexed.
     const auto inputAt = [](int i) {

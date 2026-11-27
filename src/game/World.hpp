@@ -91,8 +91,6 @@ public:
     bool resolveWalls(glm::vec2& p, float feetY, float radius, float step,
                       glm::vec2& vel) const;
 
-    static World testLevel();
-
 private:
     std::vector<Block> blocks_;
     std::vector<WorldLight> lights_;

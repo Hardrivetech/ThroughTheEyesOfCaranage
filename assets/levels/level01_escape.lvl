@@ -1,0 +1,213 @@
+# Level 01 - "Escape": a three-sector gauntlet (corridor -> arena -> pit).
+#
+# One record per line: `record key=value ...`. Vectors are comma-separated.
+# '#' starts a comment. Malformed lines are skipped and reported in the log.
+# Record reference: src/game/Level.hpp.
+#
+# Units are metres. Y is up. Blocks are described on the X/Z plane:
+#   block min=x,z max=x,z top=<height>                     flat-topped box
+#   block ... h0=<h> h1=<h> axis=x|z                       ramp: height h0 at min[axis], h1 at max[axis]
+#   base=<h> is the underside (default -0.2), door=<id> makes a closable door.
+# Materials: concrete tile painted_metal steel brass flesh plastic emissive skin cloth leather
+
+level name=level01_escape
+spawn pos=0,0,10
+
+# ---- Geometry ----------------------------------------------------------------
+
+# Sector 0 - the corridor (X -6..6, Z 15 .. -75). Floor, side walls, end cap.
+block min=-6,-75 max=6,15 top=0 color=0.38,0.38,0.36 material=tile
+block min=-4,-75 max=-3,15 top=4.8 color=0.18,0.22,0.26 material=painted_metal
+block min=3,-75 max=4,15 top=4.8 color=0.18,0.22,0.26 material=painted_metal
+
+# Partition at Z -75: two wall pieces, a lintel, and door 0 (opens when sector 0 is cleared).
+# visible=0 on a door: it is drawn dynamically so it can slide open.
+block min=-16,-76 max=-3,-75 top=9.8 color=0.48,0.48,0.46 material=concrete
+block min=3,-76 max=16,-75 top=9.8 color=0.48,0.48,0.46 material=concrete
+block min=-3,-76 max=3,-75 top=9.8 base=4.8 color=0.48,0.48,0.46 material=concrete
+block min=-3,-76 max=3,-75 top=4.8 color=0.25,0.25,0.28 material=steel visible=0 door=0
+block min=-4,15 max=4,16 top=4.8 color=0.48,0.48,0.46 material=concrete
+
+# Corridor ceiling slab.
+block min=-4,-75 max=4,15 top=5.6 base=4.8 color=0.48,0.48,0.46 material=concrete
+
+# Overhead light fixture strips (emissive boxes on the ceiling).
+block min=-0.6,-66.5 max=0.6,-63.5 top=4.78 base=4.65 color=3,2.5,1.8 material=emissive
+block min=-0.6,-51.5 max=0.6,-48.5 top=4.78 base=4.65 color=3,2.5,1.8 material=emissive
+block min=-0.6,-36.5 max=0.6,-33.5 top=4.78 base=4.65 color=3,2.5,1.8 material=emissive
+block min=-0.6,-21.5 max=0.6,-18.5 top=4.78 base=4.65 color=3,2.5,1.8 material=emissive
+block min=-0.6,-6.5 max=0.6,-3.5 top=4.78 base=4.65 color=3,2.5,1.8 material=emissive
+block min=-0.6,8.5 max=0.6,11.5 top=4.78 base=4.65 color=3,2.5,1.8 material=emissive
+
+# Cover crates at the entry (Z ~0..4).
+block min=-2.8,-2 max=-1.2,0 top=1.1 color=0.55,0.24,0.12 material=painted_metal
+block min=1.5,2 max=2.8,4 top=1.4 color=0.55,0.24,0.12 material=painted_metal
+
+# Low hurdle (Z -15): jump or vault over it.
+block min=-3,-15.5 max=3,-14.8 top=0.9 color=0.25,0.25,0.28 material=steel
+
+# Wall-run panels (Z -40..-28): run along these.
+block min=-3,-40 max=-2.7,-28 top=4.5 color=0.25,0.25,0.28 material=steel
+block min=2.7,-40 max=3,-28 top=4.5 color=0.25,0.25,0.28 material=steel
+
+# Catwalk, ramp and platform (Z -62..-44).
+block min=-2,-50 max=-0.2,-44 h0=2.2 h1=0 axis=z color=0.55,0.24,0.12 material=painted_metal
+block min=-2,-58 max=-0.2,-50 top=2.2 color=0.48,0.48,0.46 material=concrete
+block min=1.2,-62 max=2.8,-56 top=1.2 color=0.55,0.24,0.12 material=painted_metal
+
+# Structural pillars: collision only (visible=0); a pillar prop mesh is drawn on each.
+block min=-3,-60.4 max=-2.2,-59.6 top=4.8 color=0.48,0.48,0.46 material=concrete visible=0
+block min=2.2,-60.4 max=3,-59.6 top=4.8 color=0.48,0.48,0.46 material=concrete visible=0
+block min=-3,-45.4 max=-2.2,-44.6 top=4.8 color=0.48,0.48,0.46 material=concrete visible=0
+block min=2.2,-45.4 max=3,-44.6 top=4.8 color=0.48,0.48,0.46 material=concrete visible=0
+block min=-3,-30.4 max=-2.2,-29.6 top=4.8 color=0.48,0.48,0.46 material=concrete visible=0
+block min=2.2,-30.4 max=3,-29.6 top=4.8 color=0.48,0.48,0.46 material=concrete visible=0
+block min=-3,-15.4 max=-2.2,-14.6 top=4.8 color=0.48,0.48,0.46 material=concrete visible=0
+block min=2.2,-15.4 max=3,-14.6 top=4.8 color=0.48,0.48,0.46 material=concrete visible=0
+block min=-3,-0.4 max=-2.2,0.4 top=4.8 color=0.48,0.48,0.46 material=concrete visible=0
+block min=2.2,-0.4 max=3,0.4 top=4.8 color=0.48,0.48,0.46 material=concrete visible=0
+
+# Sector 1 - the arena (X -16..16, Z -130..-76). Shell: floor, side walls, back wall.
+block min=-16,-131 max=16,-75 top=0 color=0.36,0.36,0.34 material=tile
+block min=-17,-131 max=-16,-75 top=9.8 color=0.18,0.22,0.26 material=painted_metal
+block min=16,-131 max=17,-75 top=9.8 color=0.18,0.22,0.26 material=painted_metal
+block min=-17,-131 max=-4,-130 top=9.8 color=0.48,0.48,0.46 material=concrete
+block min=4,-131 max=17,-130 top=9.8 color=0.48,0.48,0.46 material=concrete
+
+# Back wall lintel and the gate, door 1 (opens when sector 1 is cleared).
+block min=-4,-131 max=4,-130 top=9.8 base=4.8 color=0.48,0.48,0.46 material=concrete
+block min=-4,-131 max=4,-130 top=4.8 color=0.25,0.25,0.28 material=steel visible=0 door=1
+
+# Arena ceiling.
+block min=-17,-131 max=17,-75 top=10.6 base=9.8 color=0.48,0.48,0.46 material=concrete
+
+# Stairs up the left wall: 10 steps, top at 3.5 m. Each rise (0.35) stays under stepHeight (0.4).
+block min=-15.5,-78.8 max=-13,-78 top=0.35 color=0.25,0.25,0.28 material=steel
+block min=-15.5,-79.6 max=-13,-78.8 top=0.7 color=0.25,0.25,0.28 material=steel
+block min=-15.5,-80.4 max=-13,-79.6 top=1.05 color=0.25,0.25,0.28 material=steel
+block min=-15.5,-81.2 max=-13,-80.4 top=1.4 color=0.25,0.25,0.28 material=steel
+block min=-15.5,-82 max=-13,-81.2 top=1.75 color=0.25,0.25,0.28 material=steel
+block min=-15.5,-82.8 max=-13,-82 top=2.1 color=0.25,0.25,0.28 material=steel
+block min=-15.5,-83.6 max=-13,-82.8 top=2.45 color=0.25,0.25,0.28 material=steel
+block min=-15.5,-84.4 max=-13,-83.6 top=2.8 color=0.25,0.25,0.28 material=steel
+block min=-15.5,-85.2 max=-13,-84.4 top=3.15 color=0.25,0.25,0.28 material=steel
+block min=-15.5,-86 max=-13,-85.2 top=3.5 color=0.25,0.25,0.28 material=steel
+
+# Catwalks and bridge at 3.5 m (underside 2.9 m, walk beneath): left, back, right.
+block min=-16,-128 max=-12.5,-86 top=3.5 base=2.9 color=0.25,0.25,0.28 material=steel
+block min=-16,-128 max=16,-124 top=3.5 base=2.9 color=0.25,0.25,0.28 material=steel
+block min=10,-128 max=16,-100 top=3.5 base=2.9 color=0.25,0.25,0.28 material=steel
+
+# Slide ramp from the right catwalk down to the floor (Z -100 -> -84).
+block min=10,-100 max=14,-84 h0=3.5 h1=0 axis=z color=0.55,0.24,0.12 material=painted_metal
+
+# Floor cover and vault targets.
+block min=-5,-100 max=-2,-98 top=1.1 color=0.55,0.24,0.12 material=painted_metal
+block min=3,-110 max=6,-108 top=1.4 color=0.55,0.24,0.12 material=painted_metal
+block min=-9,-116 max=-6,-114 top=1.1 color=0.55,0.24,0.12 material=painted_metal
+block min=-1,-108 max=1,-106 top=3 color=0.48,0.48,0.46 material=concrete
+block min=-4,-92 max=4,-91.4 top=0.9 color=0.25,0.25,0.28 material=steel
+
+# Sector 2 - the pit (X -14..14, Z -170..-131, floor at -6). Shell.
+block min=-14,-170 max=14,-131 top=-6 base=-6.2 color=0.3,0.3,0.3 material=tile
+block min=-15,-171 max=-14,-131 top=4.8 base=-6.2 color=0.18,0.22,0.26 material=painted_metal
+block min=14,-171 max=15,-131 top=4.8 base=-6.2 color=0.18,0.22,0.26 material=painted_metal
+block min=-15,-171 max=15,-170 top=4.8 base=-6.2 color=0.48,0.48,0.46 material=concrete
+block min=-15,-171 max=15,-131 top=5.6 base=4.8 color=0.48,0.48,0.46 material=concrete
+
+# Ledge you drop from (floor 0).
+block min=-4,-136 max=14,-131 top=0 base=-6.2 color=0.48,0.48,0.46 material=concrete
+
+# Exit stairs: 17 steps, each 0.35 m lower.
+block min=9,-136.8 max=13,-136 top=-0.35 base=-6.2 color=0.25,0.25,0.28 material=steel
+block min=9,-137.6 max=13,-136.8 top=-0.7 base=-6.2 color=0.25,0.25,0.28 material=steel
+block min=9,-138.4 max=13,-137.6 top=-1.05 base=-6.2 color=0.25,0.25,0.28 material=steel
+block min=9,-139.2 max=13,-138.4 top=-1.4 base=-6.2 color=0.25,0.25,0.28 material=steel
+block min=9,-140 max=13,-139.2 top=-1.75 base=-6.2 color=0.25,0.25,0.28 material=steel
+block min=9,-140.8 max=13,-140 top=-2.1 base=-6.2 color=0.25,0.25,0.28 material=steel
+block min=9,-141.6 max=13,-140.8 top=-2.45 base=-6.2 color=0.25,0.25,0.28 material=steel
+block min=9,-142.4 max=13,-141.6 top=-2.8 base=-6.2 color=0.25,0.25,0.28 material=steel
+block min=9,-143.2 max=13,-142.4 top=-3.15 base=-6.2 color=0.25,0.25,0.28 material=steel
+block min=9,-144 max=13,-143.2 top=-3.5 base=-6.2 color=0.25,0.25,0.28 material=steel
+block min=9,-144.8 max=13,-144 top=-3.85 base=-6.2 color=0.25,0.25,0.28 material=steel
+block min=9,-145.6 max=13,-144.8 top=-4.2 base=-6.2 color=0.25,0.25,0.28 material=steel
+block min=9,-146.4 max=13,-145.6 top=-4.55 base=-6.2 color=0.25,0.25,0.28 material=steel
+block min=9,-147.2 max=13,-146.4 top=-4.9 base=-6.2 color=0.25,0.25,0.28 material=steel
+block min=9,-148 max=13,-147.2 top=-5.25 base=-6.2 color=0.25,0.25,0.28 material=steel
+block min=9,-148.8 max=13,-148 top=-5.6 base=-6.2 color=0.25,0.25,0.28 material=steel
+block min=9,-149.6 max=13,-148.8 top=-5.95 base=-6.2 color=0.25,0.25,0.28 material=steel
+
+# Cover in the pit.
+block min=-8,-152 max=-5,-150 top=-4.9 base=-6.2 color=0.55,0.24,0.12 material=painted_metal
+block min=0,-160 max=3,-158 top=-4.6 base=-6.2 color=0.55,0.24,0.12 material=painted_metal
+
+# Visible ceiling light fixtures (arena, then the red pit light).
+block min=-9.2,-90.4 max=-6.8,-89.6 top=9.78 base=9.65 color=3,2.5,1.8 material=emissive
+block min=6.8,-90.4 max=9.2,-89.6 top=9.78 base=9.65 color=3,2.5,1.8 material=emissive
+block min=-9.2,-108.4 max=-6.8,-107.6 top=9.78 base=9.65 color=3,2.5,1.8 material=emissive
+block min=6.8,-108.4 max=9.2,-107.6 top=9.78 base=9.65 color=3,2.5,1.8 material=emissive
+block min=-9.2,-124.4 max=-6.8,-123.6 top=9.78 base=9.65 color=3,2.5,1.8 material=emissive
+block min=6.8,-124.4 max=9.2,-123.6 top=9.78 base=9.65 color=3,2.5,1.8 material=emissive
+block min=-1,-152 max=1,-148 top=4.78 base=4.65 color=3.2,0.5,0.35 material=emissive
+
+# ---- Room lights (the nearest few are used per frame) --------------------------
+# Arena and pit
+light pos=-8,8.8,-90 color=10,8.2,6 radius=24
+light pos=8,8.8,-90 color=10,8.2,6 radius=24
+light pos=-8,8.8,-108 color=10,8.2,6 radius=24
+light pos=8,8.8,-108 color=10,8.2,6 radius=24
+light pos=-8,8.8,-124 color=10,8.2,6 radius=24
+light pos=8,8.8,-124 color=10,8.2,6 radius=24
+light pos=0,3,-134 color=5,2.2,1.6 radius=14
+light pos=0,3.8,-150 color=8,1.2,0.8 radius=20
+light pos=0,3.8,-164 color=6,1,0.8 radius=18
+# Corridor
+light pos=0,4.4,-65 color=9,7.4,5.4 radius=16
+light pos=0,4.4,-50 color=9,7.4,5.4 radius=16
+light pos=0,4.4,-35 color=9,7.4,5.4 radius=16
+light pos=0,4.4,-20 color=9,7.4,5.4 radius=16
+light pos=0,4.4,-5 color=9,7.4,5.4 radius=16
+light pos=0,4.4,10 color=9,7.4,5.4 radius=16
+
+# ---- Target dummies (respawning practice targets; patrol=<amplitude m> makes them pace) ----
+target pos=0,0,2 patrol=2        # corridor entry patrol
+target pos=-1.8,0,-10            # near the cover crate
+target pos=1.8,0,-22 patrol=1.5
+target pos=0,0,-32 patrol=2.5    # wall-run section
+target pos=-1.5,0,-42
+target pos=-1.1,2.2,-54          # upper catwalk
+target pos=1.8,1.2,-60           # far platform
+target pos=0,0,-70 patrol=2      # end of corridor
+
+# ---- Pickups (yaw in radians) ---------------------------------------------------------
+pickup kind=pipe   pos=1.6,0.06,4     yaw=0.4
+pickup kind=bat    pos=-2.2,0.06,-8   yaw=1.2
+pickup kind=barrel pos=2.3,0.45,-18
+pickup kind=pipe   pos=-2.0,0.06,-26  yaw=2.0
+pickup kind=barrel pos=-2.3,0.45,-37
+pickup kind=bat    pos=1.4,0.06,-47   yaw=0.2
+
+# ---- Enemies (sector >= 0: objective enemy, never respawns) ---------------------------
+# Sector 0: the corridor. Clearing it opens door 0.
+enemy pos=0,0,-6     type=melee  sector=0
+enemy pos=1,0,-20    type=melee  sector=0
+enemy pos=-1,0,-34   type=ranged sector=0
+enemy pos=0,0,-68    type=ranged sector=0
+# Sector 1: the arena. Clearing it opens the gate (door 1).
+enemy pos=0,0,-100   type=melee  sector=1
+enemy pos=-8,0,-105  type=ranged sector=1
+enemy pos=8,0,-115   type=ranged sector=1
+enemy pos=5,0,-120   type=melee  sector=1
+# Sector 2: the pit. Clearing it completes the level.
+enemy pos=0,-6,-145  type=melee  sector=2
+enemy pos=6,-6,-152  type=melee  sector=2
+enemy pos=-8,-6,-165 type=ranged sector=2
+
+# ---- Triggers -------------------------------------------------------------------------
+trigger when=sector_cleared sector=0 do=open_door door=0
+trigger when=sector_cleared sector=1 do=open_door door=1
+trigger when=sector_cleared sector=2 do=complete
+
+# Checkpoints: entering the volume sets the respawn point.
+trigger when=enter min=-16,-1,-92 max=16,6,-77 do=checkpoint point=0,0,-80    # arena entrance
+trigger when=enter min=-4,-1,-136 max=14,2,-131 do=checkpoint point=5,0,-133  # pit ledge

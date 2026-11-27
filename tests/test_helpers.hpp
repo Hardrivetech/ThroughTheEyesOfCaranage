@@ -1,6 +1,6 @@
 #pragma once
 // Shared helpers for the gameplay tests: small hand-built worlds and a fixed
-// simulation step, so tests don't depend on World::testLevel() or on tuning.
+// simulation step, so tests don't depend on the real level layout or on tuning.
 #include "game/World.hpp"
 
 #include <glm/glm.hpp>
