@@ -1,7 +1,7 @@
 # Project Status Report: *Through the Eyes of Carnage*
 
 **Date:** 2026-11-27
-**Repo:** github.com/Hardrivetech/ThroughTheEyesOfCaranage (branch `main`, HEAD `a8c6dd5`; Phases 1-4 of the open-world plan are committed locally and not pushed)
+**Repo:** github.com/Hardrivetech/ThroughTheEyesOfCaranage (branch `main`, HEAD `643286e`; everything is committed, and the last commit is not pushed)
 **Studio:** Hardrive Technologies / Driveby Studios
 **Genre:** High-octane first-person shooter in the *Hardcore Henry* style
 **Stack:** Custom C++23 engine, OpenGL 4.6, GLFW 3.4, GLM 1.0.1, GLAD2. Vendored stb_image and miniaudio. Catch2 v3.7.1 for tests. CMake with Ninja.
@@ -12,12 +12,12 @@
 ## Health Check (verified 2026-11-27)
 | Item | Result |
 |---|---|
-| Unit tests (Linux, Debug) | **262 test cases.** On a pristine copy of the commit: 100% pass in Debug and Release, stable in 3 random orders. In the shared working tree 1 case fails for a reason outside the code (see Known Issues #8) |
+| Unit tests (Linux, Debug) | **362 test cases, all passing.** On a pristine copy of the commit: 100% pass in Debug and Release, stable in 3 random orders |
 | Compiler warnings | **0** in project code (game and tests, Debug and Release, GCC on Linux) |
-| Working tree | Phase 4 files committed. Other people's in-progress files (briefing art, audio, scripts, `level01_outro.brf`, `.gitignore`) are untracked or modified and deliberately not committed |
-| Game launched or played | **Not played.** Phase 4 rendered offscreen frames through the real renderer on the GPU (RX 6700 XT, Mesa, GL 4.6): shaders compile with no GL errors and the images were inspected. Audio, input, feel, the menu/briefing/HUD flow and the live game loop are still unverified |
-| Linux release binary | `build/Carnage` predates Phase 3 and 4 (no island textures, no lighting fix); rebuild before playing |
-| Code size | About 12.7k lines in `src/` and 8.0k in `tests/`. Largest: `main.cpp` 1164, `Renderer.cpp` 840, `Level.cpp` 644 |
+| Working tree | Clean. `saves/` (player saves) and `build-*/` are git-ignored |
+| Game launched or played | **Not played.** Offscreen frames of the world, the combat HUD and both menus were rendered through the real renderer on the GPU (RX 6700 XT, Mesa, GL 4.6): shaders compile with no GL errors and the images were inspected. Input, audio, feel, and the live game loop (including the new save, Continue and pause-menu actions in `main.cpp`) are unverified; only their logic is unit-tested |
+| Linux release binary | `build/Carnage` predates Phases 3 and 4 and the three milestones; rebuild before playing |
+| Code size | About 14.0k lines in `src/` and 9.8k in `tests/`. Largest: `main.cpp` 1290, `Renderer.cpp` 856, `Level.cpp` 644 |
 | Open TODO/FIXME markers | None |
 
 ## Completed Features
@@ -44,8 +44,12 @@
   - Six texture-backed materials (`concrete_worn`, `metal_rusted`, `asphalt_wet`, `snow_packed`, `hazard_trim`, `grate_industrial`) plus an animated `portal`, chosen with `mat=<name>` on any block, ramp or door. Albedo, normal and roughness/metal/AO/glow textures are generated on the CPU at startup (`gfx/ProcTextures`, deterministic, tileable) and can be replaced from `assets/textures/`.
   - World-space triplanar sampling with a second, larger-scale sample blended in by noise, so big surfaces don't show a grid of repeats. `environment snow=` settles snow on upward-facing weathered surfaces. Hazard stripes carry a chase light; portals pulse and scroll.
   - Post pass: speed lines above sprint speed and a crimson vignette driven by camera trauma (`core/PostFx.hpp`). The ACES tone map and the distance haze were already in place.
-- **Dev tools:** backtick console (`god`, `infammo`, `noclip`, `freeze`, `stats`, `spawn`, `kill_all`, `tp x y z` / `tp <spawn>`, `open_door`/`close_door`, `level <id> [spawn]`, `briefing <id>`, `timescale`, `win`, and others), F3 dev menu, F4 profiler.
-- **Tests:** 262 cases across `World`, `Movement`, `Combat`/`Weapons`, levels, prompts, briefings, the hub, broadphase, sleep/wake, includes, materials and procedural textures, and post effects. Each phase's tests were mutation-checked by injecting bugs and confirming the suite caught them.
+- **Floor and depth fixes:** no two drawn top faces share a plane (roads sit 2 cm above the ground, overlapping footprints were carved apart), and `LevelAudit` (`findCoplanarTops`, `findSnowyInteriors`) fails the tests if one comes back. Interiors (hub command post, docks warehouse) have their own tile floors so snow does not settle indoors. The camera uses a reversed-Z projection (`perspectiveReverseZ`, `glClipControl` zero-to-one, `GL_GREATER`): at 1 km the old projection could not separate surfaces closer than 1.6 m, this separates 1 mm.
+- **Saves** (`src/game/SaveSystem`): one `save` record in the `Record.hpp` format at `saves/slot<N>.sav` (slots 1-9): level, last checkpoint, health and armor, weapons and ammo, off hand, completed missions. Written automatically on a checkpoint, a portal, a level transition and a level completion, and by the pause menu or `save [slot]`; read by Continue or `load [slot]`. It never stores entity state, so a load rebuilds the level at the checkpoint. A missing, empty, oversized, binary or mangled file is rejected with a `[WRN]` (a fuzz test checks every truncation and byte change); out-of-range values are clamped and unknown weapons dropped. Completed missions persist across New Game and unlock Select Level / Hub.
+- **Combat HUD** (`src/game/HudState` for the rules, `Hud.cpp` for drawing): a momentum gauge (full at twice sprint speed; its overdrive tier starts exactly where the PostFx speed lines do), `[E] SEIZE` for a staggered enemy, a human-shield integrity bar with the throw prompt, fading directional damage arcs around the crosshair, and below 25 HP a heartbeat vignette (`PostFx`) and pulsing crosshair brackets. Crimson / amber / steel palette with bracket corners.
+- **Menus:** main (New Game, Continue with the saved level shown, Select Level / Hub, Settings, Quit) and pause (Resume, Load Last Checkpoint, Save Checkpoint, Restart Level, Settings, Quit to Main Menu). Mouse and keyboard (`Up`/`Down`/`W`/`S` + `Enter`/`Space`, `Esc` resumes); unavailable rows are dimmed and cannot be chosen.
+- **Dev tools:** backtick console (`god`, `infammo`, `noclip`, `freeze`, `stats`, `spawn`, `kill_all`, `tp x y z` / `tp <spawn>`, `open_door`/`close_door`, `level <id> [spawn]`, `briefing <id>`, `save`/`load [slot]`, `progress`, `timescale`, `win`, and others), F3 dev menu, F4 profiler.
+- **Tests:** 362 cases across `World`, `Movement`, `Combat`/`Weapons`, levels, prompts, briefings, the hub, broadphase, sleep/wake, includes, materials and procedural textures, post effects, the floor audit and depth, saves, the HUD state and the menus. Each phase's tests were mutation-checked by injecting bugs and confirming the suite caught them.
 
 ## Work Done in This Roadmap
 | Commit | What |
@@ -61,6 +65,12 @@
 | `b1d2de7` | Phase 2: enemy sleep/wake and light culling |
 | `5f673d4` | Phase 3: modular `.lvl` includes, environment record, shadow/fog tuning, Kodiak Island skeleton and POIs |
 | `a8c6dd5` | Phase 4: procedural industrial materials, triplanar world shader, snow, animated portal/hazard, post effects, **fix: floors were lit from below** |
+| `1a2ab61` | (another contributor) Windows cross-build, packaging and the briefing content |
+| `a24deb6` | Fix z-fighting and interior snow; reverse-Z depth; level audit |
+| `124d5b8` | Checkpoint and mission-progress saves (`SaveSystem`) |
+| `dab7ada` | Restore the briefing header the rewrite dropped |
+| `ed6bdb3` | (another contributor, pushed) Combat HUD state, low-health pulse, menu rows, `scripts/release.sh`; captured a snapshot of the milestone 3 work in progress |
+| `643286e` | HUD and menu follow-up: fixes `throwReady` (a mutation-test value was committed in `ed6bdb3`), a menu refocus edge case, tests, README |
 
 **Rendering bug found in Phase 4 and fixed:** `scene.frag` flipped the normal using `gl_FrontFacing`, but the level mesh and dynamic boxes are not wound consistently, so every top face of every block (all floors) was lit as if facing down. Every level, including Level 01, was far darker than intended. The shader now picks the side from screen-space derivatives. It was found by rendering real frames on the GPU; the unit tests cannot see it.
 
@@ -70,16 +80,16 @@ Bugs found and fixed along the way: the ceiling shove (above), `World::setDoorOp
 
 ## Known Issues and Tech Debt
 1. **Balance is untuned.** `EnemyConfig` in `src/game/Enemy.hpp` is labelled "all values are untuned guesses", and weapon, movement and throw numbers are unreviewed. Deliberately untouched until a manual playtest.
-2. **Unverified in the live game.** The tutorial HUD, briefing backdrop and text layout, audio, portals and level switching in `main.cpp` compile and their logic is unit-tested, but none of it has been seen or heard in a running game. World rendering (materials, lighting, post effects) was checked on offscreen frames only.
+2. **Unverified in the live game.** The tutorial HUD, briefing backdrop and text layout, audio, portals, level switching, and the new save / Continue / pause-menu wiring in `main.cpp` compile and their logic is unit-tested, but none of it has been seen or heard in a running game. World rendering, the combat HUD and the menus were checked on offscreen frames only.
 3. **Hub and range are first passes.** Layout, dimensions, lighting and pacing were authored from the level format alone.
-4. **Briefing content is in flux.** Someone else has uncommitted briefing images, audio and an edited `level01_outro.brf` in the working tree; the committed briefing still has generic filler text and no images.
+4. **Briefing text and title are placeholders.** The four-beat briefing and its images are committed; its `title` is a stand-in that its author can change.
 5. **`main.cpp` is large** (1164 lines) and holds the whole game loop, level switching and the console commands. It works, but the level and briefing flow would be easier to test if it moved out.
 6. **Build needs the network.** CMake fetches dependencies through FetchContent, and GLAD generation needs Python with jinja2.
-7. **No progress persistence.** Completed missions are not remembered, so the hub has no locked or unlocked gates.
-8. **Briefing test fails in the shared working tree.** `level01_outro.brf` (another person's in-progress edit) lost its `briefing name=... title=...` header, so its name is `unnamed`. `test_briefing.cpp` "The shipped briefing loads cleanly and is wired to Level 01" reports 4 failed checks until the header is restored. The committed version passes.
-9. **Depth precision.** Near plane 0.05 and far plane 1500 on the island with a standard 32F depth buffer gives about 1 m depth resolution at 1 km, so coplanar faces can z-fight at distance. Fog hides most of it; reverse-Z is the fix. Float precision at 2 km is about 0.12 mm, so no origin shifting is needed.
+7. **Saves are checkpoint-only.** Loading rebuilds the level, so enemies, doors and cleared sectors start fresh (by design). The hub's mission gates are not visually locked or marked cleared; only Select Level / Hub is gated, and `completed_levels` is recorded for it. There is one autosave slot; slots 2-9 are console-only. The weapon list in a save is stored but every weapon is still always available (no unlock mechanic exists).
+8. **The throw key is the grab key (`E`), not the left mouse button.** The shield HUD shows the key actually bound to Grab / Throw. Left mouse still fires the weapon while holding a shield.
+9. **Depth precision is fixed for geometry that is not coplanar.** Reverse-Z removes the distance problem; two faces in exactly the same plane would still z-fight at any distance, which the level audit now prevents in the shipped levels.
 10. **Look checked on screenshots only.** Phase 4 rendered frames of the island, hub and Level 01 through the real renderer on a GPU and inspected them, but nobody has played with it. Interiors (hub command post, Level 01) are still dark and heavily noisy; Level 01's legacy materials were not touched.
-11. **Snow also settles on indoor floors** of weathered materials in a level that sets `snow=` (the shader has no notion of a roof). Use `tile`, `grate_industrial` or `hazard_trim` for interiors in snowy levels.
+11. **The shader has no notion of a roof**, so snow settles on any upward-facing weathered surface in a level that sets `snow=`. The shipped levels avoid it by using tile for interiors, and a test (`findSnowyInteriors`) enforces that; new levels need to follow the same rule.
 12. **Grating is opaque.** The holes are drawn dark but are not see-through (and are solid for collision).
 
 Resolved earlier: line-ending churn, tracked build artifacts, out-of-date README, missing test coverage, hard-coded level data, the ceiling bug, and the compiler warning in the test suite.
@@ -90,28 +100,27 @@ Resolved earlier: line-ending churn, tracked build artifacts, out-of-date README
 - Enemy variety beyond Melee and Ranged (no heavy, shielded, charger or boss).
 - A boss encounter.
 - Art: one humanoid mesh and one pillar prop. Audio: one music track; sound effects appear to be code-generated (not confirmed).
-- Save/load and mission progress.
-- CI, packaging and a release build pipeline.
+- Visible mission progress in the hub (gates marked cleared or locked), more save slots in the menu, and saving mid-level world state (deliberately out of scope).
+- CI. Local build and release scripts exist (`scripts/build.sh` for Linux and a MinGW-w64 Windows build, `scripts/release.sh` to package and publish), but nothing runs automatically.
 
 ## Recommended Next Steps (priority order)
 1. **Push the local commits** and do a manual playtest: walk Level 01, finish it, read the briefing, explore the hub and the island, use the gates and die in a few places. Log what feels wrong, and whether the island's scale and look hold up on a real screen.
 2. **Tune balance** from that playtest (enemy damage and speed, throw damage, weapon feel). This is the first time the numbers can change.
 3. **Refine the hub, range and island** (layout, scale, lighting), brighten the dark interiors (hub command post, Level 01), and commit the real briefing text and images.
 4. **Content:** give the island a mission objective, fill its reserved POI sites, and add new enemy archetypes and a boss.
-5. **Reverse-Z depth** if distant z-fighting shows up on the island (Known Issue 9).
-6. **Split up `main.cpp`** (level switching, briefing flow and console commands) to make that flow testable.
-7. **CI:** a Linux and Windows build that runs the test suite, ideally with a headless render smoke test (the Phase 4 offscreen harness was a throwaway and is not in the repo).
+5. **Split up `main.cpp`** (level switching, briefing flow and console commands) to make that flow testable.
+6. **CI:** a Linux and Windows build that runs the test suite, ideally with a headless render smoke test (the Phase 4 offscreen harness was a throwaway and is not in the repo).
 
 ## Risks
 - **Feel and balance are unverified.** The systems are tested, but no human has played the full flow.
 - **Thin content.** The hub offers three gates and only one is a real mission.
-- **Windows and Linux divergence.** `.gitattributes` now normalizes line endings, but the project has not been built on Windows in this roadmap (the Windows branch of `CMakeLists.txt` is untested; there is an uncommitted MinGW toolchain file and a Windows playtest zip in the working tree, so someone may be working on this).
+- **Windows and Linux divergence.** `.gitattributes` now normalizes line endings, but a MinGW-w64 cross-build and a Windows playtest zip were added by another contributor, but nothing here was built or run on Windows, and the new save, menu and HUD code has only been exercised on Linux.
 
 ## Questions for the Owner
 - Can someone play through the current build and report back? That unblocks balance tuning and the hub layout.
-- What are the target platforms (Windows only, or Linux too)? Is the uncommitted Windows playtest build meant to be committed?
+- What are the target platforms (Windows only, or Linux too)? Should the Windows playtest zips stay in the repository?
 - What is the priority for the next content: a second mission, new enemy types, or a boss? Is there a target date for a demo?
 - Who writes the real briefing text and images?
 
 ---
-*Status was derived from the git history, the source, and test runs (Debug and Release builds, 262 test cases). It was not derived from a gameplay session.*
+*Status was derived from the git history, the source, and test runs (Debug and Release builds, 362 test cases, plus offscreen GPU renders). It was not derived from a gameplay session.*
