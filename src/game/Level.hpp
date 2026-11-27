@@ -1,4 +1,5 @@
 #pragma once
+#include "core/Record.hpp"
 #include "game/Enemy.hpp"
 #include "game/Interact.hpp"
 #include "game/Triggers.hpp"
@@ -19,7 +20,7 @@ namespace carnage {
 // Vectors are comma-separated (pos=1,0,-4). Blank lines and '#' comments are
 // ignored. See assets/levels/level01_escape.lvl for every record type:
 //
-//   level   name=<id> [next_level=<id>] [transition_type=menu|level]
+//   level   name=<id> [next_level=<id>] [transition_type=menu|level] [briefing=<id>]
 //   spawn   pos=x,y,z
 //   block   min=x,z max=x,z (top=h | h0=h h1=h axis=x|z)
 //           [base=h] [color=r,g,b] [material=<name>] [visible=0|1] [door=<id>]
@@ -38,7 +39,8 @@ namespace carnage {
 //
 // When the level is completed, `transition_type=level` loads `next_level`
 // (a level id, i.e. assets/levels/<id>.lvl); the default, menu, returns to the
-// main menu.
+// main menu. If `briefing=<id>` is set, that briefing (assets/briefings/<id>.brf)
+// plays first and then the game continues to the destination above.
 //
 // Malformed lines are skipped and reported as issues; they never abort a load.
 
@@ -64,6 +66,7 @@ struct PickupSpawn {
 struct LevelData {
     std::string name = "unnamed";
     std::string nextLevel;                          // level id loaded on completion
+    std::string briefing;                           // briefing id played before moving on
     TransitionType transition = TransitionType::Menu;
     glm::vec3   spawn{0.0f, 0.0f, 10.0f};
     World       world;
@@ -73,10 +76,7 @@ struct LevelData {
     std::vector<TriggerVolume> triggers;
 };
 
-struct LevelIssue {
-    int         line = 0;  // 1-based; 0 = not tied to a line
-    std::string message;
-};
+using LevelIssue = rec::Issue;  // line is 1-based; 0 = not tied to a line
 
 struct LevelLoad {
     LevelData               level;
@@ -97,7 +97,8 @@ std::string levelPath(std::string_view assetDir, std::string_view id);
 // What the game should do when this level is completed.
 struct LevelTransition {
     TransitionType type = TransitionType::Menu;
-    std::string    next;  // level id, when type == Level
+    std::string    next;      // level id, when type == Level
+    std::string    briefing;  // briefing id to play first; empty = none
 };
 LevelTransition completionTransition(const LevelData& level);
 

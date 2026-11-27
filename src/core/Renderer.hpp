@@ -35,6 +35,16 @@ int  loadMesh(const char* relativePath);
 void addProp(int meshId, const glm::mat4& model, const glm::vec3& color, Material material);
 void clearProps();  // drops every prop (call before building a new level's props)
 
+// Briefing backdrop. One image is kept at a time; asking for another frees the
+// previous one, and shutdown frees whatever is left.
+//   setBriefingImage: path relative to assets/ ("" = none). Returns true if an image is
+//                     now shown; false means a plain dark background is used.
+//   drawBriefingBackdrop: clears the screen and draws the image (cover-fit, slow drift)
+//                     or the plain background. Draw overlay rects on top afterwards.
+bool setBriefingImage(const char* relativePath);
+void clearBriefingImage();
+void drawBriefingBackdrop(float timeSeconds);
+
 // Re-reads every shader from disk; a shader that fails to compile keeps its
 // previous program. Bound to F5 in main.
 void reloadShaders();

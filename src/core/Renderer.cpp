@@ -82,28 +82,46 @@ GLuint g_menuBgTex    = 0;
 float  g_menuBgAspect = 16.0f / 9.0f;
 bool   g_menuBgTried  = false;
 
+// Loads an image file into an sRGB texture. Returns 0 (and creates nothing) if
+// the file is missing, unreadable, or implausibly large.
+GLuint loadTextureFile(const std::string& path, float& aspectOut, int* wOut = nullptr, int* hOut = nullptr) {
+    constexpr int kMaxSide = 8192;  // refuse absurd sizes before allocating anything
+    int w = 0, h = 0, n = 0;
+    if (!stbi_info(path.c_str(), &w, &h, &n) || w <= 0 || h <= 0 || w > kMaxSide || h > kMaxSide) return 0;
+    stbi_uc* px = stbi_load(path.c_str(), &w, &h, &n, 4);
+    if (!px) return 0;
+    GLuint tex = 0;
+    glCreateTextures(GL_TEXTURE_2D, 1, &tex);
+    glTextureStorage2D(tex, 1, GL_SRGB8_ALPHA8, w, h);
+    glTextureSubImage2D(tex, 0, 0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, px);
+    glTextureParameteri(tex, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTextureParameteri(tex, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTextureParameteri(tex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(tex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    stbi_image_free(px);
+    aspectOut = static_cast<float>(w) / static_cast<float>(h);
+    if (wOut) *wOut = w;
+    if (hOut) *hOut = h;
+    return tex;
+}
+
 void loadMenuBackground() {
     g_menuBgTried = true;
     for (const char* name : {"ui/menu_background.png", "ui/menu_background.jpg",
                              "ui/menu_background.jpeg", "ui/menu_background.bmp"}) {
-        const std::string path = std::string(CARNAGE_ASSET_DIR) + "/" + name;
-        int w = 0, h = 0, n = 0;
-        stbi_uc* px = stbi_load(path.c_str(), &w, &h, &n, 4);
-        if (!px) continue;
-        glCreateTextures(GL_TEXTURE_2D, 1, &g_menuBgTex);
-        glTextureStorage2D(g_menuBgTex, 1, GL_SRGB8_ALPHA8, w, h);
-        glTextureSubImage2D(g_menuBgTex, 0, 0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, px);
-        glTextureParameteri(g_menuBgTex, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTextureParameteri(g_menuBgTex, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTextureParameteri(g_menuBgTex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTextureParameteri(g_menuBgTex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        stbi_image_free(px);
-        g_menuBgAspect = static_cast<float>(w) / static_cast<float>(h);
+        int w = 0, h = 0;
+        g_menuBgTex = loadTextureFile(std::string(CARNAGE_ASSET_DIR) + "/" + name, g_menuBgAspect, &w, &h);
+        if (!g_menuBgTex) continue;
         log::info("Menu background: {} ({}x{})", name, w, h);
         return;
     }
     log::info("No assets/ui/menu_background.png|jpg found; using procedural backdrop");
 }
+
+// The briefing backdrop: at most one image alive at a time.
+GLuint      g_briefTex    = 0;
+float       g_briefAspect = 16.0f / 9.0f;
+std::string g_briefPath;  // what g_briefTex was loaded from ("" = nothing / plain background)
 
 bool loadShaders() {
     bool ok = true;
@@ -349,6 +367,9 @@ void destroyScene() {
     g_sky.release(); g_post.release(); g_overlay.release(); g_menuBg.release();
     if (g_menuBgTex) glDeleteTextures(1, &g_menuBgTex);
     g_menuBgTex = 0;
+    if (g_briefTex) glDeleteTextures(1, &g_briefTex);
+    g_briefTex = 0;
+    g_briefPath.clear();
 }
 
 // ---- GLFW callbacks -----------------------------------------------------------
@@ -767,6 +788,47 @@ void drawMenuBackground(float timeSeconds) {
     g_menuBg.set("uAspect", g_aspect);
     g_menuBg.set("uImgAspect", g_menuBgAspect);
     if (g_menuBgTex) glBindTextureUnit(0, g_menuBgTex);
+    glBindVertexArray(g_emptyVao);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    glBindVertexArray(0);
+    glEnable(GL_DEPTH_TEST);
+}
+
+bool setBriefingImage(const char* relativePath) {
+    const std::string rel = relativePath ? relativePath : "";
+    if (rel == g_briefPath) return g_briefTex != 0;  // already showing (or already known missing)
+    if (g_briefTex) glDeleteTextures(1, &g_briefTex);
+    g_briefTex = 0;
+    g_briefPath = rel;
+    if (rel.empty()) return false;
+    g_briefTex = loadTextureFile(std::string(CARNAGE_ASSET_DIR) + "/" + rel, g_briefAspect);
+    if (!g_briefTex) log::warn("Briefing image '{}' could not be loaded; using a plain background", rel);
+    return g_briefTex != 0;
+}
+
+void clearBriefingImage() {
+    if (g_briefTex) glDeleteTextures(1, &g_briefTex);
+    g_briefTex = 0;
+    g_briefPath.clear();
+}
+
+void drawBriefingBackdrop(float timeSeconds) {
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(0, 0, g_fbW, g_fbH);
+    if (!g_briefTex) {
+        // No image: a plain near-black background.
+        glClearColor(0.02f, 0.02f, 0.025f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+        return;
+    }
+    glDisable(GL_DEPTH_TEST);
+    g_menuBg.use();
+    g_menuBg.set("uTex", 0);
+    g_menuBg.set("uHasTex", 1);
+    g_menuBg.set("uTime", timeSeconds);
+    g_menuBg.set("uAspect", g_aspect);
+    g_menuBg.set("uImgAspect", g_briefAspect);
+    glBindTextureUnit(0, g_briefTex);
     glBindVertexArray(g_emptyVao);
     glDrawArrays(GL_TRIANGLES, 0, 3);
     glBindVertexArray(0);

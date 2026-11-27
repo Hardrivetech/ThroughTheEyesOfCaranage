@@ -41,7 +41,7 @@ src/
 ├── game/         # Movement, camera feel, weapons, combat, enemy AI, interaction, triggers, world, level loader
 ├── gfx/          # Meshes, shaders, humanoid model, particle system and decals
 └── ui/           # Menus and text rendering
-assets/           # Shaders, meshes, audio and levels (assets/levels/*.lvl)
+assets/           # Shaders, meshes, audio, levels (assets/levels/*.lvl) and briefings (assets/briefings/*.brf)
 third_party/      # Vendored single-header libraries (stb_image, miniaudio)
 tests/            # Catch2 unit tests
 CMakeLists.txt    # CMake configuration
@@ -72,7 +72,27 @@ trigger when=enter min=-4,-1,-32 max=4,4,-26 do=prompt time=10 clear_on=wall_run
 
 **Tutorial prompts** (`do=prompt`) show a short hint when the player enters a volume. The text fades after `time` seconds, or sooner once the player does what it teaches (`clear_on=jump|slide|vault|wall_run|fire|grab|throw`). `{name}` placeholders show the player's current key for an action (`{grab}`, `{sprint}`, `{weapon1}`, `{lmb}`, ...). The loader checks the text, so a typo'd placeholder, a character the HUD font can't draw, or a line that is too long (90 characters once keys are filled in) is reported instead of showing garbage.
 
-**Level transitions:** put `next_level=<id>` on the `level` record to continue into `assets/levels/<id>.lvl` when the level is completed (by clearing its `complete` sector or the `win` console command). Without it the game returns to the main menu. If the next level can't be loaded the game logs an error and falls back to the menu.
+**Level transitions:** put `next_level=<id>` on the `level` record to continue into `assets/levels/<id>.lvl` when the level is completed (by clearing its `complete` sector or the `win` console command). Without it the game returns to the main menu. If the next level can't be loaded the game logs an error and falls back to the menu. Add `briefing=<id>` to play a briefing (below) first.
+
+---
+
+## Briefings
+
+A briefing is a skippable lore screen shown between levels: a few "beats", each with an optional background image and a few lines of text that type out on screen. Files live in `assets/briefings/<id>.brf`, in the same plain-text style as levels, so they can be edited without touching C++. The shipped example is `assets/briefings/level01_outro.brf` (placeholder lore, rewrite it freely).
+
+```text
+briefing name=level01_outro title="LEVEL 01 - ESCAPE" music=1
+beat text="You made it out of the facility.\nNobody was supposed to." sfx=impact hold=3
+beat text="Every door behind you is sealed." image=briefings/level01_a.png hold=4
+```
+
+* `text` is up to 360 characters and 8 explicit lines (`\n` is a line break); long lines word-wrap automatically. Only characters the HUD font can draw are allowed (letters, digits and `. - + : ! % / < > [ ] , _ = ( ) ' ? * ; | @ ~`).
+* `image` is optional and relative to `assets/` (`.png`, `.jpg`, `.jpeg`, `.bmp`). A missing image shows a plain dark background and logs a warning.
+* `hold` is how many seconds a beat stays after its text has finished appearing (default 4). `sfx` is `none`, `click`, `impact` or `explosion`. `music=1` plays the title-screen track while the briefing runs.
+* **Controls:** `SPACE` / `ENTER` finish the text, then move to the next beat; `ESC` skips the whole briefing at any time. `SPACE` / `ENTER` are ignored for the first 0.3 s so keys mashed at the end of a fight don't skip it by accident.
+* To preview one in game, open the console and run `briefing <id>`, then close the console.
+
+Malformed lines are skipped and reported in the log (`file:line: message`), exactly like level files.
 
 The loader (`src/game/Level.hpp`) never aborts on a bad line: it skips the line, logs `file:line: message`, and keeps loading. It also rejects typo'd keys, and drops triggers that could never work (a door id that doesn't exist, or a sector with no enemies). See the header for the full record reference.
 
@@ -111,6 +131,7 @@ Developer keys: `` ` `` (backtick) opens the console, `F3` toggles the dev menu 
 * `open_door <id>` / `close_door <id>`: control doors and gates
 * `timescale <val>`: scale simulation speed
 * `win`: trigger level completion
+* `briefing <id>`: preview a briefing from `assets/briefings/`
 
 ---
 

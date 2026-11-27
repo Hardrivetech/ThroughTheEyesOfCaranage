@@ -10,10 +10,11 @@
 #   base=<h> is the underside (default -0.2), door=<id> makes a closable door.
 # Materials: concrete tile painted_metal steel brass flesh plastic emissive skin cloth leather
 
-level name=level01_escape
-# When this level is completed the game returns to the main menu. To continue into another
-# level instead, add:  next_level=<level id>   (the id of assets/levels/<id>.lvl)
-# Phase B/C of the roadmap will point this at the briefing and the hub.
+level name=level01_escape briefing=level01_outro
+# On completion the game plays the briefing assets/briefings/level01_outro.brf (ESC skips it),
+# then returns to the main menu. To continue into another level afterwards, add:
+#     next_level=<level id>      (the id of assets/levels/<id>.lvl)
+# Remove briefing=... to go straight to the destination.
 spawn pos=0,0,10
 
 # ---- Geometry ----------------------------------------------------------------

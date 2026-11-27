@@ -8,6 +8,7 @@
 #include "core/Random.hpp"
 #include "core/Renderer.hpp"
 #include "core/Subsystems.hpp"
+#include "game/Briefing.hpp"
 #include "game/Camera.hpp"
 #include "game/CameraFeel.hpp"
 #include "game/Combat.hpp"
@@ -149,6 +150,9 @@ int main() {
     TriggerSystem triggers;
     installTriggers(level, triggers);
     PromptSystem  prompts;  // tutorial hints shown by `prompt` triggers
+    BriefingPlayer  briefing;             // lore screen between levels; the sim is frozen while active
+    LevelTransition afterBriefing;        // where to go once it ends
+    bool            briefingResume = false;  // a console preview: just resume play afterwards
     glm::vec3   checkpoint = level.spawn;
     bool        deathHandled = false;
     bool        levelComplete = false;
@@ -214,6 +218,33 @@ int main() {
         buildProps();
         resetGame();
         return true;
+    };
+
+    // Starts the briefing `id` (assets/briefings/<id>.brf). Returns false, changing nothing,
+    // if it cannot be read or has no beats; the caller then skips straight to the destination.
+    const auto startBriefing = [&](const std::string& id) -> bool {
+        const std::string path = briefingPath(CARNAGE_ASSET_DIR, id);
+        BriefingLoad b = loadBriefingFile(path);
+        for (const rec::Issue& i : b.issues) log::warn("{}:{}: {}", path, i.line, i.message);
+        if (!b.opened || b.data.beats.empty()) return false;
+        for (const rec::Issue& i : checkBriefingImages(b.data, CARNAGE_ASSET_DIR))
+            log::warn("{}:{}: {}", path, i.line, i.message);
+        renderer::clearBriefingImage();
+        briefing.start(std::move(b.data));
+        return true;
+    };
+    // Called once when a briefing finishes or is skipped: frees its image and moves on.
+    const auto endBriefing = [&] {
+        renderer::clearBriefingImage();
+        briefing.reset();
+        if (briefingResume) { briefingResume = false; return; }
+        if (afterBriefing.type == TransitionType::Level) {
+            if (switchLevel(afterBriefing.next)) return;
+            log::error("cannot load next level '{}'; returning to the menu", afterBriefing.next);
+        }
+        menu.showMain();
+        input::setCursorCaptured(false);
+        resetGame();
     };
 
     // World sound with occlusion: geometry between the ear and the source
@@ -372,6 +403,16 @@ int main() {
             effects.clearDecals();
             return std::string("decals cleared");
         });
+        console.add("briefing", "briefing <id> - preview a briefing (close the console to watch)", [&](Args a) -> CmdResult {
+            if (a.empty() || !validLevelId(a[0])) return std::unexpected("usage: briefing <id>");
+            afterBriefing  = {};
+            briefingResume = true;
+            if (!startBriefing(a[0])) {
+                briefingResume = false;
+                return std::unexpected("cannot load briefing '" + a[0] + "' (see the log)");
+            }
+            return std::format("playing briefing {}", a[0]);
+        });
         console.add("quit", "exit the game", [&](Args) -> CmdResult {
             renderer::requestClose();
             return std::string("bye");
@@ -392,7 +433,7 @@ int main() {
         // Once per frame: events, then mouse look at render rate.
         [&] {
             renderer::pollEvents();
-            if (!menu.active() && !health.dead && !dev.consoleOpen && !dev.menuOpen) {
+            if (!menu.active() && !briefing.active() && !health.dead && !dev.consoleOpen && !dev.menuOpen) {
                 glm::vec2 d = input::consumeMouseDelta() * menu.settings().sensitivity;
                 if (menu.settings().invertY) d.y = -d.y;
                 camera.look(d);
@@ -437,6 +478,30 @@ int main() {
                     ++ticks;
                     return;
                 }
+            }
+
+            // A briefing owns the tick while it plays (ahead of the menu, so ESC skips it
+            // instead of opening the pause menu). SPACE / ENTER advance, ESC skips.
+            if (briefing.active()) {
+                BriefingInput bi;
+                bi.skip    = input::pressed(GLFW_KEY_ESCAPE);
+                bi.advance = input::pressed(GLFW_KEY_SPACE) || input::pressed(GLFW_KEY_ENTER) ||
+                             input::pressed(GLFW_KEY_KP_ENTER);
+                const BriefingEvents be = briefing.update(static_cast<float>(dt), bi);
+                if (be.beatStarted) {
+                    if (const BriefingBeat* b = briefing.beat()) renderer::setBriefingImage(b->image.c_str());
+                    switch (be.sfx) {
+                        case BriefingSfx::Click:     audio::play(audio::Sfx::UiClick, 0.7f); break;
+                        case BriefingSfx::Impact:    audio::play(audio::Sfx::Impact, 0.8f); break;
+                        case BriefingSfx::Explosion: audio::play(audio::Sfx::Explosion, 0.8f, 0.0f, 0.8f); break;
+                        case BriefingSfx::None:      break;
+                    }
+                }
+                audio::setMenuMusic(briefing.active() && briefing.data().music);
+                if (be.ended) endBriefing();
+                input::endTick();
+                ++ticks;
+                return;
             }
 
             // Menus own the tick while active: the simulation is frozen.
@@ -747,6 +812,16 @@ int main() {
                 // level, or (the default, or if that fails) back to the main menu.
                 if (completeTimer >= kCompleteFadeEnd) {
                     const LevelTransition next = completionTransition(level);
+                    if (!next.briefing.empty()) {
+                        afterBriefing  = next;
+                        briefingResume = false;
+                        if (startBriefing(next.briefing)) {
+                            input::endTick();
+                            ++ticks;
+                            return;
+                        }
+                        log::warn("briefing '{}' could not be played; continuing without it", next.briefing);
+                    }
                     if (next.type == TransitionType::Level) {
                         if (switchLevel(next.next)) {
                             input::endTick();
@@ -809,6 +884,18 @@ int main() {
             dev::FrameProfile::ema(prof.frameMs,
                 std::chrono::duration<float, std::milli>(tFrame - lastFrameStart).count());
             lastFrameStart = tFrame;
+            if (briefing.active()) {
+                // Lore screen: backdrop image (or plain dark), then the text overlay.
+                overlay.clear();
+                renderer::drawBriefingBackdrop(std::chrono::duration<float>(Clock::now() - startTime).count());
+                buildBriefingOverlay(briefing, renderer::aspect(), overlay);
+                if (dev.consoleOpen)
+                    dev::drawConsole(console, renderer::aspect(), std::fmod(std::chrono::duration<float>(Clock::now() - startTime).count(), 1.0f) < 0.5f, overlay);
+                renderer::drawOverlay(overlay);
+                renderer::endFrame();
+                ++frames;
+                return;
+            }
             const float   a      = static_cast<float>(alpha);
             const Weapon& weapon = *weapons[current];
             const Weapon* left   = (offhand && !interact.holding()) ? offhand.get() : nullptr;
