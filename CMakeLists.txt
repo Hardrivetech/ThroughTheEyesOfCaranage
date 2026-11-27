@@ -91,8 +91,14 @@ if(CARNAGE_BUILD_TESTS)
 
     add_executable(CarnageTests
         tests/test_core.cpp
+        tests/test_world.cpp
+        tests/test_movement.cpp
+        tests/test_combat.cpp
         src/game/World.cpp
+        src/game/Movement.cpp
         src/game/Combat.cpp
+        src/game/Weapon.cpp
+        src/game/Weapons.cpp
         src/game/Enemy.cpp
         src/ui/Menu.cpp
         src/ui/Text.cpp)
