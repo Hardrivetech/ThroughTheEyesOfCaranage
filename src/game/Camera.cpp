@@ -9,6 +9,7 @@
 namespace carnage {
 
 namespace {
+constexpr float     kNearPlane = 0.05f;
 constexpr float     kMaxPitch = glm::radians(89.0f);
 constexpr glm::vec3 kUp{0.0f, 1.0f, 0.0f};
 constexpr glm::vec3 kRight{1.0f, 0.0f, 0.0f};
@@ -44,8 +45,13 @@ glm::mat4 Camera::view(const glm::vec3& eye, const ShakeOffset& shake, float rol
     return glm::inverse(glm::translate(glm::mat4(1.0f), pos) * glm::mat4_cast(q));
 }
 
+glm::mat4 perspectiveReverseZ(float fovyRadians, float aspect, float nearPlane, float farPlane) {
+    // Swapping the planes in the zero-to-one projection flips the depth range.
+    return glm::perspectiveRH_ZO(fovyRadians, aspect, farPlane, nearPlane);
+}
+
 glm::mat4 Camera::projection(float aspect) const {
-    return glm::perspective(glm::radians(fovDegrees), aspect, 0.05f, farPlane);
+    return perspectiveReverseZ(glm::radians(fovDegrees), aspect, kNearPlane, farPlane);
 }
 
 } // namespace carnage

@@ -101,7 +101,7 @@ block min=-15.5,-86 max=-13,-85.2 top=3.5 color=0.25,0.25,0.28 material=steel
 
 # Catwalks and bridge at 3.5 m (underside 2.9 m, walk beneath): left, back, right.
 block min=-16,-128 max=-12.5,-86 top=3.5 base=2.9 color=0.25,0.25,0.28 material=steel
-block min=-16,-128 max=16,-124 top=3.5 base=2.9 color=0.25,0.25,0.28 material=steel
+block min=-12.5,-128 max=10,-124 top=3.5 base=2.9 color=0.25,0.25,0.28 material=steel
 block min=10,-128 max=16,-100 top=3.5 base=2.9 color=0.25,0.25,0.28 material=steel
 
 # Slide ramp from the right catwalk down to the floor (Z -100 -> -84).

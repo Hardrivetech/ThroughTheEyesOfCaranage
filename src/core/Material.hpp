@@ -69,6 +69,14 @@ inline constexpr std::array<MaterialName, 18> kMaterialNames{{
     {"portal", Material::Portal},
 }};
 
+// Whether snow settles on upward-facing surfaces of this material in a level with weather
+// (environment snow=). Mirrors isWeathered() in assets/shaders/scene.frag; a test keeps them
+// equal. Interior-only and safety materials (tile, grating, hazard trim) are not on the list.
+constexpr bool accumulatesSnow(Material m) {
+    return m == Material::Concrete || m == Material::PaintedMetal || m == Material::ConcreteWorn ||
+           m == Material::MetalRusted || m == Material::AsphaltWet;
+}
+
 inline std::optional<Material> materialFromName(std::string_view name) {
     for (const MaterialName& m : kMaterialNames)
         if (m.name == name) return m.material;

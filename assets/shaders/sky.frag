@@ -9,7 +9,8 @@ uniform vec3 uEye;
 uniform vec3 uSunDir;
 
 void main() {
-    vec4 w = uInvViewProj * vec4(vUV * 2.0 - 1.0, 1.0, 1.0);
+    // z = 0 is the far plane with the reversed depth buffer (a point far from the eye, so the direction is precise).
+    vec4 w = uInvViewProj * vec4(vUV * 2.0 - 1.0, 0.0, 1.0);
     vec3 d = normalize(w.xyz / w.w - uEye);
     fragColor = vec4(skyColor(d, uSunDir), 1.0);
 }

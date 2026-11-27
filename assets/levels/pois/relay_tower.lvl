@@ -12,8 +12,8 @@ block min=-20,-20 max=20,20 top=0.3 color=0.34,0.34,0.32 mat=concrete_worn
 block min=-21,-21 max=21,-20 top=3.2 color=0.22,0.26,0.30 mat=metal_rusted
 block min=-21,-20 max=-20,21 top=3.2 color=0.22,0.26,0.30 mat=metal_rusted
 block min=20,-20 max=21,21 top=3.2 color=0.22,0.26,0.30 mat=metal_rusted
-block min=-21,20 max=-3,21 top=3.2 color=0.22,0.26,0.30 mat=metal_rusted
-block min=3,20 max=21,21 top=3.2 color=0.22,0.26,0.30 mat=metal_rusted
+block min=-20,20 max=-3,21 top=3.2 color=0.22,0.26,0.30 mat=metal_rusted
+block min=3,20 max=20,21 top=3.2 color=0.22,0.26,0.30 mat=metal_rusted
 block min=-3,20 max=3,21 top=3.2 base=2.4 color=0.22,0.26,0.30 mat=metal_rusted
 block min=-3,20 max=3,21 top=2.4 mat=hazard_trim visible=0 door=0
 block min=-3.5,19.8 max=-3,21.2 top=3.4 mat=hazard_trim

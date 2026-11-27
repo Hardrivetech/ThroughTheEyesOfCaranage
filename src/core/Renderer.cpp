@@ -665,11 +665,22 @@ void renderScene(const SceneParams& p, std::span<const DrawBox> boxes,
     glEnable(GL_DEPTH_TEST);
     glDepthMask(GL_TRUE);
 
-    // 1. Sun shadow map (static level, props, non-emissive boxes).
+    // 1. Sun shadow map (static level, props, non-emissive boxes). It uses the ordinary depth
+    //    convention: its own orthographic matrix maps depth to -1..1 and the shader compares
+    //    against 0..1 values with "less or equal".
+    glClipControl(GL_LOWER_LEFT, GL_NEGATIVE_ONE_TO_ONE);
+    glDepthFunc(GL_LESS);
+    glClearDepth(1.0);
     const BoxBatch batch = uploadBoxes(boxes);
     shadowPass(lightVP, batch);
 
-    // 2. HDR scene.
+    // 2. HDR scene, with a reversed depth buffer: the camera projection (Camera::projection,
+    //    perspectiveReverseZ) stores 1 at the near plane and 0 at the far plane, so the buffer is
+    //    cleared to 0 and a fragment wins when its depth is GREATER. A 32-bit float depth buffer has
+    //    most of its precision near 0, which is now the far end, where the open island needs it.
+    glClipControl(GL_LOWER_LEFT, GL_ZERO_TO_ONE);
+    glDepthFunc(GL_GREATER);
+    glClearDepth(0.0);
     glBindFramebuffer(GL_FRAMEBUFFER, g_msaaFbo);
     glViewport(0, 0, g_fbW, g_fbH);
     glClear(GL_DEPTH_BUFFER_BIT);
@@ -728,6 +739,11 @@ void renderScene(const SceneParams& p, std::span<const DrawBox> boxes,
     // 4. Resolve MSAA, then tonemap into the window's framebuffer.
     glBlitNamedFramebuffer(g_msaaFbo, g_resolveFbo, 0, 0, g_fbW, g_fbH, 0, 0, g_fbW, g_fbH,
                            GL_COLOR_BUFFER_BIT, GL_NEAREST);
+
+    // Back to the ordinary depth convention for everything that follows (post, overlay, menus).
+    glClipControl(GL_LOWER_LEFT, GL_NEGATIVE_ONE_TO_ONE);
+    glDepthFunc(GL_LESS);
+    glClearDepth(1.0);
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, g_fbW, g_fbH);

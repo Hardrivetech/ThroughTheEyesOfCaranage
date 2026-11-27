@@ -57,6 +57,7 @@ add_executable(Carnage
     src/game/Level.cpp
     src/game/Briefing.cpp
     src/game/LevelGraph.cpp
+    src/game/LevelAudit.cpp
     src/game/Enemy.cpp
     src/ui/Text.cpp
     src/ui/Menu.cpp
@@ -107,6 +108,7 @@ if(CARNAGE_BUILD_TESTS)
         tests/test_wake.cpp
         tests/test_include.cpp
         tests/test_materials.cpp
+        tests/test_floors.cpp
         src/game/World.cpp
         src/game/Movement.cpp
         src/game/Camera.cpp
@@ -117,6 +119,7 @@ if(CARNAGE_BUILD_TESTS)
         src/game/Level.cpp
         src/game/Briefing.cpp
         src/game/LevelGraph.cpp
+        src/game/LevelAudit.cpp
         src/game/Enemy.cpp
         src/gfx/ProcTextures.cpp
         src/ui/Menu.cpp

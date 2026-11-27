@@ -28,17 +28,18 @@ spawn name=from_kodiak_hub pos=10,0,52 yaw=0
 block min=-500,-1300 max=500,100 top=0 mat=snow_packed
 block min=-520,-1320 max=-500,120 top=45 color=0.20,0.22,0.24 mat=concrete_worn
 block min=500,-1320 max=520,120 top=45 color=0.20,0.22,0.24 mat=concrete_worn
-block min=-520,-1320 max=520,-1300 top=45 color=0.20,0.22,0.24 mat=concrete_worn
-block min=-520,100 max=520,120 top=45 color=0.20,0.22,0.24 mat=concrete_worn
+block min=-500,-1320 max=500,-1300 top=45 color=0.20,0.22,0.24 mat=concrete_worn
+block min=-500,100 max=500,120 top=45 color=0.20,0.22,0.24 mat=concrete_worn
 
-# ---- Roads: the main road north, and spurs to the two POIs. Flush with the ground (same top height), so there is no
-#      lip to trip over at sprint speed; the dark colour makes them read as roads. The later blocks win where they overlap. -------------------------------------
-block min=-5,-1250 max=5,85 top=0.0 mat=asphalt_wet
-block min=5,-305 max=380,-295 top=0.0 mat=asphalt_wet
-block min=-125,-1005 max=-5,-995 top=0.0 mat=asphalt_wet
-block min=-125,-1030 max=-115,-995 top=0.0 mat=asphalt_wet   # up to the tower gate
+# ---- Roads: the main road north, and spurs to the two POIs. Each sits 2 cm above the ground (top=0.02): two top faces at the
+#      same height would z-fight (flicker and tear), and 2 cm is far below the 0.4 m step height, so walking onto a road at sprint
+#      speed is smooth. No two road slabs overlap either; a test (tests/test_floors.cpp) fails if any two top faces become coplanar. ----
+block min=-5,-1250 max=5,85 top=0.02 mat=asphalt_wet
+block min=5,-305 max=380,-295 top=0.02 mat=asphalt_wet
+block min=-125,-1005 max=-5,-995 top=0.02 mat=asphalt_wet
+block min=-125,-1030 max=-115,-1005 top=0.02 mat=asphalt_wet   # up to the tower gate
 # a ramp from the road up onto the quay (the docks' deck is 0.8 m above the ground)
-block min=368,-312 max=380,-288 h0=0.0 h1=0.8 axis=x color=0.40,0.40,0.38 mat=concrete_worn
+block min=368,-312 max=380,-288 h0=0.02 h1=0.8 axis=x color=0.40,0.40,0.38 mat=concrete_worn
 
 # ---- Landforms: two ridges with ramps up their sides, and a long retaining wall ------------------
 block min=-260,-460 max=-140,-340 top=14 color=0.27,0.29,0.26 mat=concrete_worn

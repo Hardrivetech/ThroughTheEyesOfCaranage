@@ -6,6 +6,15 @@
 
 namespace carnage {
 
+// Perspective projection for a reversed depth buffer, clip space z in 0..1 (the renderer sets
+// glClipControl(GL_LOWER_LEFT, GL_ZERO_TO_ONE) and tests with GL_GREATER). Depth is 1 at the near
+// plane and 0 at the far plane. A float depth buffer has most of its precision near 0, and
+// reversing the range puts that precision where the standard mapping runs out: at 1 km with a
+// 0.05 m near plane, the old projection could not tell surfaces under about 1 m apart, this one
+// separates a few centimetres. x, y and w match glm::perspective exactly, so nothing moves on
+// screen.
+glm::mat4 perspectiveReverseZ(float fovyRadians, float aspect, float nearPlane, float farPlane);
+
 // First-person camera orientation. Yaw/pitch are stored as scalars (no
 // accumulated roll, no gimbal flip) and composed into a quaternion on demand.
 // Position comes from the movement controller.

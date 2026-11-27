@@ -1010,8 +1010,7 @@ int main() {
             renderer::SceneParams sp;
             sp.view                = view;
             sp.projection          = proj;
-            sp.viewmodelProjection = glm::perspective(glm::radians(65.0f), renderer::aspect(),
-                                                      0.01f, 10.0f);
+            sp.viewmodelProjection = perspectiveReverseZ(glm::radians(65.0f), renderer::aspect(), 0.01f, 10.0f);
             sp.time  = std::chrono::duration<float>(Clock::now() - startTime).count();
             sp.env   = level.environment;
             sp.shake = trauma.shake() * menu.settings().shake;
