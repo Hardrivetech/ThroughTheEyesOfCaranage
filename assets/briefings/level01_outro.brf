@@ -1,27 +1,7 @@
-# Briefing shown after Level 01 ("Escape"), before the game moves on.
-#
-# PLACEHOLDER LORE written to exercise the system - rewrite freely, no code changes needed.
-#
-# One record per line:  record key=value key="quoted value with spaces"
-#
-#   briefing name=<id> [title="..."] [music=0|1]
-#       title   a heading shown top-left on every beat
-#       music   1 (default) plays the title-screen track while the briefing runs
-#
-#   beat text="..." [image=<path under assets/>] [hold=<sec>] [sfx=none|click|impact|explosion]
-#       text    up to 360 characters; \n starts a new line. Letters, digits and  . - + : ! % / < > [ ] , _ = ( ) ' ? * ; | @ ~
-#       image   optional background, e.g. image=briefings/level01_a.png  (.png .jpg .jpeg .bmp).
-#               A missing image just shows a plain dark background (the log says so).
-#       hold    seconds the beat stays after its text has finished appearing (default 4)
-#       sfx     a sound when the beat starts
-#
-# The player advances with SPACE or ENTER (first press completes the text, the next moves on)
-# and skips the whole briefing with ESC. To preview this file in game: open the console (`)
-# and type:  briefing level01_outro   then close the console.
+# assets/briefings/level01_outro.brf
+# Post-escape intro briefing: Carnage & Kodiak Island
 
-briefing name=level01_outro title="LEVEL 01 - ESCAPE" music=1
-
-beat text="You made it out of the facility.\nNobody was supposed to." sfx=impact hold=3
-beat text="Every door behind you is sealed. Every camera is already looking for you. The only way left is forward." hold=4
-# beat text="..." image=briefings/level01_a.png hold=5
-beat text="Next stop: Kodiak Island." sfx=click hold=3
+beat image=briefings/boot_diagnostics.png text="[BOOT SEQUENCE // SUB-LEVEL 04] Cold iron in your spine. Chrome where your ribs used to be. They bolted a neural override into your skull at Blackwater Anchorage and left you on a slab to bleed out -- until the firmware cracked and woke up hungry."
+beat image=briefings/carnage_hud.png text="[PROJECT CARNAGE] No name. No badge. Just a serial tag stamped into your collarbone: UNIT-00 // CARNAGE. Every strike feeds the actuator loop, every dropped body buys another ten seconds of redline adrenaline."
+beat image=briefings/kodiak_basin.png text="[KODIAK ISLAND, ALASKA] Forty miles off the Alaskan shelf, buried under freezing salt fog and rusted cannery steel. The syndicate turned Kodiak Basin into an off-grid blacksite -- docks, fuel depots, relay towers, and three hundred armed contractors standing between you and the mainland."
+beat image=briefings/kodiak_targets.png text="[DIRECTIVE: REDLINE] You just punched through their containment pit. The basin gates are open, the comms net is screaming, and every outpost on the island has your signature. Keep moving, stay loud, and tear Kodiak down to the bedrock."

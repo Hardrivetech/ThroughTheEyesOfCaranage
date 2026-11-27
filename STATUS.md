@@ -1,13 +1,13 @@
 # Project Status Report: *Through the Eyes of Carnage*
 
 **Date:** 2026-11-27
-**Repo:** github.com/Hardrivetech/ThroughTheEyesOfCaranage (branch `main`; Phases 1-4 of the open-world plan are committed locally and not pushed)
+**Repo:** github.com/Hardrivetech/ThroughTheEyesOfCaranage (branch `main`, HEAD `a8c6dd5`; Phases 1-4 of the open-world plan are committed locally and not pushed)
 **Studio:** Hardrive Technologies / Driveby Studios
 **Genre:** High-octane first-person shooter in the *Hardcore Henry* style
 **Stack:** Custom C++23 engine, OpenGL 4.6, GLFW 3.4, GLM 1.0.1, GLAD2. Vendored stb_image and miniaudio. Catch2 v3.7.1 for tests. CMake with Ninja.
 
 ## Overall Stage
-**Vertical slice, pre-alpha (v0.1.0).** The engine, combat and level pipeline work end to end, and the game now has a flow: Level 01 (escape gauntlet) -> briefing -> Kodiak Island hub -> mission gates. The target is now a single contiguous Kodiak Island basin with modular points of interest. A 1 km x 1.4 km island skeleton with two POIs exists; content is still thin and nothing has been playtested by a person yet.
+**Vertical slice, pre-alpha (v0.1.0).** The engine, combat and level pipeline work end to end, and the game now has a flow: Level 01 (escape gauntlet) -> briefing -> Kodiak Island hub -> mission gates. The target is now a single contiguous Kodiak Island basin with modular points of interest. A 1 km x 1.4 km island skeleton with two POIs exists and now has a textured, weathered look (Phase 4); content is still thin and nothing has been playtested by a person yet.
 
 ## Health Check (verified 2026-11-27)
 | Item | Result |
@@ -15,9 +15,9 @@
 | Unit tests (Linux, Debug) | **262 test cases.** On a pristine copy of the commit: 100% pass in Debug and Release, stable in 3 random orders. In the shared working tree 1 case fails for a reason outside the code (see Known Issues #8) |
 | Compiler warnings | **0** in project code (game and tests, Debug and Release, GCC on Linux) |
 | Working tree | Phase 4 files committed. Other people's in-progress files (briefing art, audio, scripts, `level01_outro.brf`, `.gitignore`) are untracked or modified and deliberately not committed |
-| Game launched or played | **No.** There was no display in the analysis environment, so rendering, audio, feel and the on-screen flow are unverified |
-| Linux release binary | `build/Carnage` in the repo directory is from Nov 22 and is stale; rebuild before playing |
-| Code size | About 12.7k lines in `src/` and 8.0k in `tests/`. Largest: `main.cpp` 1160, `Renderer.cpp` 824, `Level.cpp` 648 |
+| Game launched or played | **Not played.** Phase 4 rendered offscreen frames through the real renderer on the GPU (RX 6700 XT, Mesa, GL 4.6): shaders compile with no GL errors and the images were inspected. Audio, input, feel, the menu/briefing/HUD flow and the live game loop are still unverified |
+| Linux release binary | `build/Carnage` predates Phase 3 and 4 (no island textures, no lighting fix); rebuild before playing |
+| Code size | About 12.7k lines in `src/` and 8.0k in `tests/`. Largest: `main.cpp` 1164, `Renderer.cpp` 840, `Level.cpp` 644 |
 | Open TODO/FIXME markers | None |
 
 ## Completed Features
@@ -33,7 +33,7 @@
 - **Tutorial prompts:** `do=prompt` triggers show a hint that fades on a timer or once the player does the taught action. `{action}` placeholders show the player's current keys. Level 01 has 11 prompts covering movement, melee, guns, explosions and seize/shield/throw.
 - **Level transitions:** `next_level`, `next_spawn` and `briefing` on the level record. Levels are swapped in place, and a failed load falls back to the menu.
 - **Briefings** (`assets/briefings/*.brf`): skippable lore screens with typewriter text, optional background image (plain fallback if missing), optional sound per beat. `SPACE`/`ENTER` advance, `ESC` skips. The console command `briefing <id>` previews one. The playback logic is a pure state machine that always terminates.
-- **Kodiak Island hub** (`kodiak_hub.lvl`): one outdoor level with a landing pad, plaza, command post (door 0) and east yard (door 1). Doors open on approach, each zone has a checkpoint, and two glowing gates are portals. `kodiak_range.lvl` is a small practice level reachable through one gate.
+- **Kodiak Island hub** (`kodiak_hub.lvl`): one outdoor level with a landing pad, plaza, command post (door 0) and east yard (door 1). Doors open on approach, each zone has a checkpoint, and three animated gates are portals (Level 01, the practice range and the island). `kodiak_range.lvl` is a small practice level reachable through one gate.
 - **Level network checker** (`LevelGraph`): verifies every portal, `next_level`, arrival spawn and briefing resolves, and that every level has a way back. It runs at startup and its problems are logged.
 - **Broadphase:** `World` queries (rays, ground, ceiling, wall probes, collision) run through a uniform XZ grid, so they only examine nearby blocks. Results are bit-identical to the old full scan (checked against a verbatim copy of it, including tie-breaks), and doors need no grid updates. About 157x faster for rays and 387x for collision in a 3000-block, 2 km world.
 - **AI sleep/wake and light culling:** enemies far from the player don't run their brain (vision raycast, movement, ground and wall queries) and stand still until the player comes within the wake radius (50 m; they sleep beyond 65 m, so there is no flicker on the boundary). Damage, a nearby hurt ally, a gunshot, a punch or a blast wakes them (and keeps them awake for 10 s). Sleeping enemies still count for objectives and can be shot. Room lights are culled by distance in one pass, and sounds beyond audible range skip their occlusion raycasts. `EnemyConfig` balance numbers are untouched; the radii live in a separate `ActivationConfig`. The F4 overlay and the `stats` command show awake/asleep enemies, lights submitted and world-query load.
@@ -45,7 +45,7 @@
   - World-space triplanar sampling with a second, larger-scale sample blended in by noise, so big surfaces don't show a grid of repeats. `environment snow=` settles snow on upward-facing weathered surfaces. Hazard stripes carry a chase light; portals pulse and scroll.
   - Post pass: speed lines above sprint speed and a crimson vignette driven by camera trauma (`core/PostFx.hpp`). The ACES tone map and the distance haze were already in place.
 - **Dev tools:** backtick console (`god`, `infammo`, `noclip`, `freeze`, `stats`, `spawn`, `kill_all`, `tp x y z` / `tp <spawn>`, `open_door`/`close_door`, `level <id> [spawn]`, `briefing <id>`, `timescale`, `win`, and others), F3 dev menu, F4 profiler.
-- **Tests:** 226 cases across `World`, `Movement`, `Combat`/`Weapons`, levels, prompts, briefings, the hub, broadphase, sleep/wake and includes. Each phase's tests were mutation-checked by injecting bugs and confirming the suite caught them.
+- **Tests:** 262 cases across `World`, `Movement`, `Combat`/`Weapons`, levels, prompts, briefings, the hub, broadphase, sleep/wake, includes, materials and procedural textures, and post effects. Each phase's tests were mutation-checked by injecting bugs and confirming the suite caught them.
 
 ## Work Done in This Roadmap
 | Commit | What |
@@ -60,7 +60,7 @@
 | `63c6952` | Phase 1: broadphase grid for `World` queries |
 | `b1d2de7` | Phase 2: enemy sleep/wake and light culling |
 | `5f673d4` | Phase 3: modular `.lvl` includes, environment record, shadow/fog tuning, Kodiak Island skeleton and POIs |
-| Phase 4 commit | Procedural industrial materials, triplanar world shader, snow, animated portal/hazard, post effects, **fix: floors were lit from below** |
+| `a8c6dd5` | Phase 4: procedural industrial materials, triplanar world shader, snow, animated portal/hazard, post effects, **fix: floors were lit from below** |
 
 **Rendering bug found in Phase 4 and fixed:** `scene.frag` flipped the normal using `gl_FrontFacing`, but the level mesh and dynamic boxes are not wound consistently, so every top face of every block (all floors) was lit as if facing down. Every level, including Level 01, was far darker than intended. The shader now picks the side from screen-space derivatives. It was found by rendering real frames on the GPU; the unit tests cannot see it.
 
@@ -70,10 +70,10 @@ Bugs found and fixed along the way: the ceiling shove (above), `World::setDoorOp
 
 ## Known Issues and Tech Debt
 1. **Balance is untuned.** `EnemyConfig` in `src/game/Enemy.hpp` is labelled "all values are untuned guesses", and weapon, movement and throw numbers are unreviewed. Deliberately untouched until a manual playtest.
-2. **Unverified in game.** The rendering and audio paths added in this roadmap (tutorial HUD, briefing backdrop and text layout, hub lighting and scale, portals and level switching in `main.cpp`) compile and their logic is unit-tested, but none of it has been seen or heard.
+2. **Unverified in the live game.** The tutorial HUD, briefing backdrop and text layout, audio, portals and level switching in `main.cpp` compile and their logic is unit-tested, but none of it has been seen or heard in a running game. World rendering (materials, lighting, post effects) was checked on offscreen frames only.
 3. **Hub and range are first passes.** Layout, dimensions, lighting and pacing were authored from the level format alone.
-4. **Placeholder lore.** The three beats in `level01_outro.brf` are generic filler, and no briefing images exist (the plain background is used).
-5. **`main.cpp` is large** (1139 lines) and holds the whole game loop, level switching and the console commands. It works, but the level and briefing flow would be easier to test if it moved out.
+4. **Briefing content is in flux.** Someone else has uncommitted briefing images, audio and an edited `level01_outro.brf` in the working tree; the committed briefing still has generic filler text and no images.
+5. **`main.cpp` is large** (1164 lines) and holds the whole game loop, level switching and the console commands. It works, but the level and briefing flow would be easier to test if it moved out.
 6. **Build needs the network.** CMake fetches dependencies through FetchContent, and GLAD generation needs Python with jinja2.
 7. **No progress persistence.** Completed missions are not remembered, so the hub has no locked or unlocked gates.
 8. **Briefing test fails in the shared working tree.** `level01_outro.brf` (another person's in-progress edit) lost its `briefing name=... title=...` header, so its name is `unnamed`. `test_briefing.cpp` "The shipped briefing loads cleanly and is wired to Level 01" reports 4 failed checks until the header is restored. The committed version passes.
@@ -85,7 +85,8 @@ Bugs found and fixed along the way: the ceiling shove (above), `World::setDoorOp
 Resolved earlier: line-ending churn, tracked build artifacts, out-of-date README, missing test coverage, hard-coded level data, the ceiling bug, and the compiler warning in the test suite.
 
 ## Not Yet Started or Missing
-- More mission levels. Only Level 01 is a real mission; the hub's second gate leads to the practice range.
+- More mission levels. Only Level 01 is a real mission; the hub's gates lead to it, the practice range and the open island (which has two POIs but no mission objective yet).
+- The remaining Kodiak POIs (the island file reserves sites for a fuel depot, cannery, radar station and old bunker).
 - Enemy variety beyond Melee and Ranged (no heavy, shielded, charger or boss).
 - A boss encounter.
 - Art: one humanoid mesh and one pillar prop. Audio: one music track; sound effects appear to be code-generated (not confirmed).
@@ -93,21 +94,22 @@ Resolved earlier: line-ending churn, tracked build artifacts, out-of-date README
 - CI, packaging and a release build pipeline.
 
 ## Recommended Next Steps (priority order)
-1. **Push the local commits** and do a manual playtest: walk Level 01, finish it, read the briefing, explore the hub, use both gates and die in a few places. Log what feels wrong.
+1. **Push the local commits** and do a manual playtest: walk Level 01, finish it, read the briefing, explore the hub and the island, use the gates and die in a few places. Log what feels wrong, and whether the island's scale and look hold up on a real screen.
 2. **Tune balance** from that playtest (enemy damage and speed, throw damage, weapon feel). This is the first time the numbers can change.
-3. **Refine the hub and range** (layout, scale, lighting) and replace the placeholder briefing text and add images.
-4. **Content:** a second mission level, new enemy archetypes and a boss.
-5. **Split up `main.cpp`** (level switching, briefing flow and console commands) to make that flow testable.
-6. **CI:** a Linux and Windows build that runs the test suite.
+3. **Refine the hub, range and island** (layout, scale, lighting), brighten the dark interiors (hub command post, Level 01), and commit the real briefing text and images.
+4. **Content:** give the island a mission objective, fill its reserved POI sites, and add new enemy archetypes and a boss.
+5. **Reverse-Z depth** if distant z-fighting shows up on the island (Known Issue 9).
+6. **Split up `main.cpp`** (level switching, briefing flow and console commands) to make that flow testable.
+7. **CI:** a Linux and Windows build that runs the test suite, ideally with a headless render smoke test (the Phase 4 offscreen harness was a throwaway and is not in the repo).
 
 ## Risks
 - **Feel and balance are unverified.** The systems are tested, but no human has played the full flow.
-- **Thin content.** The hub offers two gates and only one is a real mission.
-- **Windows and Linux divergence.** `.gitattributes` now normalizes line endings, but the project has not been built on Windows in this roadmap (the Windows branch of `CMakeLists.txt` is untested).
+- **Thin content.** The hub offers three gates and only one is a real mission.
+- **Windows and Linux divergence.** `.gitattributes` now normalizes line endings, but the project has not been built on Windows in this roadmap (the Windows branch of `CMakeLists.txt` is untested; there is an uncommitted MinGW toolchain file and a Windows playtest zip in the working tree, so someone may be working on this).
 
 ## Questions for the Owner
 - Can someone play through the current build and report back? That unblocks balance tuning and the hub layout.
-- What are the target platforms (Windows only, or Linux too)?
+- What are the target platforms (Windows only, or Linux too)? Is the uncommitted Windows playtest build meant to be committed?
 - What is the priority for the next content: a second mission, new enemy types, or a boss? Is there a target date for a demo?
 - Who writes the real briefing text and images?
 
