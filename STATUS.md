@@ -1,84 +1,93 @@
 # Project Status Report: *Through the Eyes of Carnage*
 
-**Date:** 2026-11-26
-**Repo:** github.com/Hardrivetech/ThroughTheEyesOfCaranage (branch `main`, HEAD `268a3bc`)
+**Date:** 2026-11-27
+**Repo:** github.com/Hardrivetech/ThroughTheEyesOfCaranage (branch `main`, HEAD `e97f65b`, one commit ahead of `origin/main`)
 **Studio:** Hardrive Technologies / Driveby Studios
 **Genre:** High-octane first-person shooter in the *Hardcore Henry* style
 **Stack:** Custom C++23 engine, OpenGL 4.6, GLFW 3.4, GLM 1.0.1, GLAD2. Vendored stb_image and miniaudio. Catch2 v3.7.1 for tests. CMake with Ninja.
 
 ## Overall Stage
-**Vertical slice, pre-alpha (v0.1.0).** The core engine and gameplay loop work end to end. There is one playable level, built from hand-coded test geometry.
+**Vertical slice, pre-alpha (v0.1.0).** The engine, combat and level pipeline work end to end, and the game now has a flow: Level 01 (escape gauntlet) -> briefing -> Kodiak Island hub -> mission gates. Content is still thin (three levels) and nothing has been playtested by a person yet.
 
-## Health Check (verified 2026-11-26)
+## Health Check (verified 2026-11-27)
 | Item | Result |
 |---|---|
-| Unit tests (Linux, Debug) | **Pass: 142 test cases** (`ctest` 100%), no expected failures |
-| Compiler warnings | **0** in project code (game and tests, Linux, GCC) |
-| Linux release binary | A `build/Carnage` binary from Nov 22 is present |
-| Game launched or played during this review | **No.** There was no display in the analysis environment, so gameplay is unverified |
-| Code size | About 10k lines in `src/` and `tests/` (largest files: `main.cpp` 978, `Renderer.cpp` 776, `Mesh.cpp` 372) |
-| Open TODO/FIXME markers in code | None |
+| Unit tests (Linux, Debug) | **Pass: 142 test cases** (`ctest` 100%), stable in random order, no expected failures |
+| Compiler warnings | **0** in project code (game and tests, Debug and Release, GCC on Linux) |
+| Working tree | Clean. The last commit (`e97f65b`) is not pushed yet |
+| Game launched or played | **No.** There was no display in the analysis environment, so rendering, audio, feel and the on-screen flow are unverified |
+| Linux release binary | `build/Carnage` in the repo directory is from Nov 22 and is stale; rebuild before playing |
+| Code size | About 11.2k lines in `src/` and 4.7k in `tests/`. Largest: `main.cpp` 1139, `Renderer.cpp` 840, `Level.cpp` 403, `Briefing.cpp` 346 |
+| Open TODO/FIXME markers | None |
 
 ## Completed Features
-- **Engine:**
-  - Fixed 60 Hz timestep loop.
-  - Custom global allocator.
-  - Input system with rebindable keys, saved to an INI settings file with clamping.
-  - Renderer with PBR-style materials, shadows, sky, post-processing and room lights.
-  - O(1) particle pool and decal ring buffer.
-- **Audio:** 3D spatial mixer with distance attenuation, panning and occlusion. Music is one track, *Steel and Sinew* by Byt3TuneZ.
-- **Player:**
-  - Movement with wall-run, ramps and ledges.
-  - Camera feel (trauma shake, recoil).
-  - Viewmodel and HUD.
-  - Health with armor and i-frames, plus a death and checkpoint-respawn flow.
-- **Combat:**
-  - Hitscan and melee.
-  - Weapons: Fists, Pistol, SMG, Shotgun, Rocket Launcher with explosions.
-  - Throwable and melee pickups (pipe, bat, barrel).
-- **Enemy AI:**
-  - Idle, Patrol, Chase, Attack and Seized states.
-  - Melee lunge and ranged hitscan archetypes, with line-of-sight, vision-cone and hearing checks.
-  - **Latest addition (commit `1b09b0d`):** seize, grab, human shield and throw. A staggered enemy can be grabbed and used as a shield, or thrown to damage others.
-- **Level flow:** 3 sectors (corridor, arena, pit) with 11 enemies. Clearing a sector opens a door or gate, clearing the pit completes the level, and checkpoint volumes are in place.
-- **Menus and UI:** main menu, settings and text rendering.
-- **Dev tools:** backtick console (`god`, `infammo`, `noclip`, `freeze`, `stats`, `spawn`, `kill_all`, `tp`, `open_door`/`close_door`, `timescale`, `win`), F3 dev menu, F4 profiler.
+- **Engine:** fixed 60 Hz timestep loop, custom global allocator, rebindable input saved to an INI settings file, PBR-style renderer (materials, shadows, sky, post-processing, room lights), O(1) particle pool and decal ring buffer.
+- **Audio:** 3D spatial mixer with distance attenuation, panning and occlusion. One music track (*Steel and Sinew* by Byt3TuneZ), which also plays during briefings.
+- **Player:** momentum movement (sprint, slide, jump and vault, wall-run, ramps, ledges), camera feel (trauma shake, recoil), viewmodel, HUD, health with armor and i-frames, death and checkpoint respawn.
+- **Combat:** hitscan and melee, five weapons (Fists, Pistol, SMG, Shotgun, Rocket Launcher with explosions), dual-wield, throwable and swingable pickups (pipe, bat, explosive barrel).
+- **Enemy AI:** melee (lunge) and ranged (hitscan) enemies with line-of-sight, vision cone and hearing, plus **seize -> human shield -> throw** on staggered enemies.
+- **Data-driven levels** (`assets/levels/*.lvl`, plain text, shared parser in `src/core/Record.hpp`):
+  - Records: blocks (flat and ramps), doors, lights, targets, enemies, pickups, triggers, spawns.
+  - Triggers: open door, checkpoint, complete, tutorial prompt, portal.
+  - The loader skips malformed lines with `file:line: message`, rejects typo'd keys, and drops triggers that could never work.
+- **Tutorial prompts:** `do=prompt` triggers show a hint that fades on a timer or once the player does the taught action. `{action}` placeholders show the player's current keys. Level 01 has 11 prompts covering movement, melee, guns, explosions and seize/shield/throw.
+- **Level transitions:** `next_level`, `next_spawn` and `briefing` on the level record. Levels are swapped in place, and a failed load falls back to the menu.
+- **Briefings** (`assets/briefings/*.brf`): skippable lore screens with typewriter text, optional background image (plain fallback if missing), optional sound per beat. `SPACE`/`ENTER` advance, `ESC` skips. The console command `briefing <id>` previews one. The playback logic is a pure state machine that always terminates.
+- **Kodiak Island hub** (`kodiak_hub.lvl`): one outdoor level with a landing pad, plaza, command post (door 0) and east yard (door 1). Doors open on approach, each zone has a checkpoint, and two glowing gates are portals. `kodiak_range.lvl` is a small practice level reachable through one gate.
+- **Level network checker** (`LevelGraph`): verifies every portal, `next_level`, arrival spawn and briefing resolves, and that every level has a way back. It runs at startup and its problems are logged.
+- **Dev tools:** backtick console (`god`, `infammo`, `noclip`, `freeze`, `stats`, `spawn`, `kill_all`, `tp x y z` / `tp <spawn>`, `open_door`/`close_door`, `level <id> [spawn]`, `briefing <id>`, `timescale`, `win`, and others), F3 dev menu, F4 profiler.
+- **Tests:** 142 cases across `World`, `Movement`, `Combat`/`Weapons`, levels, prompts, briefings and the hub. Each phase's tests were mutation-checked by injecting bugs and confirming the suite caught them.
+
+## Work Done in This Roadmap
+| Commit | What |
+|---|---|
+| `a62c8ce` | Repo hygiene: line endings, untracked build artifacts, README rewrite |
+| `3afa3ac` | Unit tests for World, Movement, Combat and Weapons |
+| `23e6936` | Level data moved out of C++ into `level01_escape.lvl` and a loader |
+| `2f71356` | Tutorial prompts and level-completion transitions |
+| `f2b1946` | Fix: jumping under low ceilings shoved the player sideways |
+| `68bd54b` | Skippable lore briefings |
+| `e97f65b` | Kodiak hub, portals, named spawns, level network checker (not pushed) |
+
+Bugs found and fixed along the way: the ceiling shove (above), `World::setDoorOpen(-1)` disabling every ordinary block, the player starting at the controller's default position instead of the level spawn, and enter-triggered doors announcing "SECTOR CLEARED".
 
 ## Known Issues and Tech Debt
-1. ~~Line-ending churn~~ **Fixed (Phase 1):** `.gitattributes` added (`* text=auto`, explicit LF for sources, docs and shaders) and the tree renormalized.
-2. ~~Build artifacts tracked in git~~ **Fixed (Phase 1):** 83 generated files under `build-tests/` and `__cmake_systeminformation/` were untracked (kept on disk) and added to `.gitignore`.
-3. ~~README out of date~~ **Fixed (Phase 1):** dependencies, feature set, controls and Linux and Windows build commands are now accurate.
-4. **Balance is untuned:** `EnemyConfig` in `src/game/Enemy.hpp` is explicitly labelled "all values are untuned guesses".
-5. ~~Test coverage gaps~~ **Fixed (Phase 2):** new tests cover `World` queries and raycasts, `MovementController` (acceleration, jump, coyote and buffer, ramps, slide, vault, wall-run, ceiling, void respawn, determinism), the 60 Hz loop, `Combat` (hitscan, headshots, melee, explosions and falloff, rockets, blast impulse), `Weapon` state machine and recoil, and health/armor/i-frame interaction. They live in `tests/test_world.cpp`, `tests/test_movement.cpp` and `tests/test_combat.cpp`. A mutation check (5 deliberately injected bugs) was caught by the suite each time.
-4a. ~~BUG~~ **Fixed:** jumping under a low overhead slab used to shove the player sideways through it (about 2 m under the arena's 2.9 m catwalks). `MovementController::tick()` ran `World::resolveWalls()` before the ceiling clamp; the clamp now runs first. Guarded by two regression tests (a synthetic slab and the real arena catwalks).
-6. ~~Hard-coded content~~ **Fixed (Phase 3):** the level now lives in `assets/levels/level01_escape.lvl`, read by `src/game/Level.cpp` (`LevelLoader`). `World::testLevel()` and the `populate*` functions in `main.cpp` are gone. The loader tolerates malformed lines and reports them; see `tests/test_level.cpp`.
-7. **Build needs the network:** CMake fetches dependencies through FetchContent, and GLAD generation needs Python with jinja2.
+1. **Balance is untuned.** `EnemyConfig` in `src/game/Enemy.hpp` is labelled "all values are untuned guesses", and weapon, movement and throw numbers are unreviewed. Deliberately untouched until a manual playtest.
+2. **Unverified in game.** The rendering and audio paths added in this roadmap (tutorial HUD, briefing backdrop and text layout, hub lighting and scale, portals and level switching in `main.cpp`) compile and their logic is unit-tested, but none of it has been seen or heard.
+3. **Hub and range are first passes.** Layout, dimensions, lighting and pacing were authored from the level format alone.
+4. **Placeholder lore.** The three beats in `level01_outro.brf` are generic filler, and no briefing images exist (the plain background is used).
+5. **`main.cpp` is large** (1139 lines) and holds the whole game loop, level switching and the console commands. It works, but the level and briefing flow would be easier to test if it moved out.
+6. **Build needs the network.** CMake fetches dependencies through FetchContent, and GLAD generation needs Python with jinja2.
+7. **No progress persistence.** Completed missions are not remembered, so the hub has no locked or unlocked gates.
+
+Resolved earlier: line-ending churn, tracked build artifacts, out-of-date README, missing test coverage, hard-coded level data, the ceiling bug, and the compiler warning in the test suite.
 
 ## Not Yet Started or Missing
-- A second level, or any content beyond the single test level.
+- More mission levels. Only Level 01 is a real mission; the hub's second gate leads to the practice range.
 - Enemy variety beyond Melee and Ranged (no heavy, shielded, charger or boss).
-- Boss encounter. The only boss is a placeholder dummy at the end of the corridor.
-- Art: only one humanoid mesh and one pillar prop.
-- Audio: one music track. Sound effects appear to be code-generated (not confirmed).
-- Gameplay balance and playtest pass.
+- A boss encounter.
+- Art: one humanoid mesh and one pillar prop. Audio: one music track; sound effects appear to be code-generated (not confirmed).
+- Save/load and mission progress.
 - CI, packaging and a release build pipeline.
 
 ## Recommended Next Steps (priority order)
-1. ~~Repo hygiene~~ Done (Phase 1).
-2. **Playtest and tune:** a manual play session to tune enemy damage, speed, throw damage and weapon feel. Log findings.
-3. ~~Add tests~~ Done (Phase 2). (Ceiling bug fixed, see 4a.)
-4. **Content:** the level format, tutorial prompts, level transitions, briefings and the Kodiak hub are done (Phases A to C); next are new mission levels, enemy archetypes and a boss, or new enemy archetypes and a boss.
-5. **CI:** a Linux and Windows build that runs the test suite.
+1. **Push `e97f65b`** and do a manual playtest: walk Level 01, finish it, read the briefing, explore the hub, use both gates and die in a few places. Log what feels wrong.
+2. **Tune balance** from that playtest (enemy damage and speed, throw damage, weapon feel). This is the first time the numbers can change.
+3. **Refine the hub and range** (layout, scale, lighting) and replace the placeholder briefing text and add images.
+4. **Content:** a second mission level, new enemy archetypes and a boss.
+5. **Split up `main.cpp`** (level switching, briefing flow and console commands) to make that flow testable.
+6. **CI:** a Linux and Windows build that runs the test suite.
 
 ## Risks
-- **Little content beyond the vertical slice:** three levels (Level 01, the Kodiak hub, a practice range). The hub has two gates; the next missions need new levels.
-- **Balance and feel unverified:** nothing has been playtested in this review.
-- **Windows and Linux divergence:** the line-ending and tracked-build-artifact problems will keep causing noisy diffs and merge conflicts (a README merge conflict was already hit in commit `268a3bc`).
+- **Feel and balance are unverified.** The systems are tested, but no human has played the full flow.
+- **Thin content.** The hub offers two gates and only one is a real mission.
+- **Windows and Linux divergence.** `.gitattributes` now normalizes line endings, but the project has not been built on Windows in this roadmap (the Windows branch of `CMakeLists.txt` is untested).
 
 ## Questions for the Owner
-- What was the last thing being worked on? The recent commits only show seize, grab and throw.
+- Can someone play through the current build and report back? That unblocks balance tuning and the hub layout.
 - What are the target platforms (Windows only, or Linux too)?
-- What are the priorities and the target date for a demo?
+- What is the priority for the next content: a second mission, new enemy types, or a boss? Is there a target date for a demo?
+- Who writes the real briefing text and images?
 
 ---
-*Status was derived from the git history, the source, and a test run. It was not derived from a gameplay session.*
+*Status was derived from the git history, the source, and test runs (Debug and Release builds, 142 test cases). It was not derived from a gameplay session.*
